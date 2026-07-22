@@ -1,0 +1,2 @@
+-- Enable PostGIS
+CREATE EXTENSION IF NOT EXISTS postgis;
