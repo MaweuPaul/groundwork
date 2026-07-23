@@ -28,6 +28,10 @@ func main() {
 	// Initialize repositories, services, and handlers
 	parcelRepo := repository.NewParcelRepository(db)
 	parcelSvc := service.NewParcelService(parcelRepo)
+	
+	geeClient := service.NewGEEServiceClient(cfg.GEEServiceURL)
+	_ = geeClient // Will be injected into a snapshot service later
+
 	parcelHandler := handler.NewParcelHandler(parcelSvc)
 
 	// Setup Routes
