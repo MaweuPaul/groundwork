@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"groundwork/internal/models"
-
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -18,20 +16,6 @@ func Connect(dsn string) (*gorm.DB, error) {
 	}
 
 	return db, nil
-}
-
-// AutoMigrate runs GORM auto migrations
-func AutoMigrate(db *gorm.DB) error {
-	log.Println("Running AutoMigrate...")
-	// Note: AutoMigrate will not create PostGIS extension. Run migrations/001_initial_schema.sql first.
-	return db.AutoMigrate(
-		&models.Parcel{},
-		&models.Methodology{},
-		&models.Snapshot{},
-		&models.Measurement{},
-		&models.ImagerySource{},
-		&models.Alert{},
-	)
 }
 
 // Close closes the underlying *sql.DB connection

@@ -10,11 +10,11 @@
 -- Extensions
 -- ============================================================
 
--- Enables PostGIS geometry types and spatial functions.
-CREATE EXTENSION IF NOT EXISTS postgis;
+-- Enables PostGIS geometry types and spatial functions (Must be enabled by superuser).
+-- CREATE EXTENSION IF NOT EXISTS postgis;
 
--- Provides gen_random_uuid().
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Provides gen_random_uuid() (Built-in in Postgres 13+).
+-- CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 
 -- ============================================================

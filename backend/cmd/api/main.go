@@ -16,16 +16,14 @@ func main() {
 	cfg := config.Load()
 
 	// Initialize Database
-	db, err := database.Connect(cfg.DBURL)
+	db, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer database.Close(db)
 
 	// Run auto-migrations (optional, usually done via tools, but requested in DB module)
-	if err := database.AutoMigrate(db); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
-	}
+	// Database schema is managed via SQL migrations, not GORM AutoMigrate
 
 	// Initialize repositories, services, and handlers
 	parcelRepo := repository.NewParcelRepository(db)
