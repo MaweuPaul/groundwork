@@ -1,56 +1,67 @@
 # Groundwork
 
-Groundwork is an independent verification layer for real-world land asset claims. It ingests multi-source satellite imagery (e.g., Sentinel-2 via Google Earth Engine), computes spectral indices like NDVI using versioned methodology, and serves auditable time-series data over a fast Go + PostGIS backend. This ensures claims about physical land conditions are backed by reproducible data.
+Groundwork is an independent verification layer for real-world land asset claims. It replaces trust in paperwork with trust in reproducible satellite data by tracking physical land boundaries and calculating vegetation health indices (like NDVI) over time.
+
+It ingests multi-source satellite imagery (e.g., Sentinel-2 via Google Earth Engine), computes spectral indices using versioned methodology, and serves auditable time-series data over a fast Go + PostGIS backend. 
+
+## Core Concepts & Schema
+
+Groundwork relies on a strict, auditable geospatial database using PostgreSQL and the PostGIS extension.
+
+- **Parcels**: Physical land boundaries defined as standard GPS polygons (`GEOMETRY(POLYGON, 4326)`). The system automatically calculates the exact real-world acreage (in hectares) using PostGIS functions that factor in the curvature of the Earth.
+- **Methodologies**: Immutable, version-controlled specifications that define *how* a satellite measurement is calculated (e.g., which satellite bands to use, cloud masking thresholds, and how to composite multiple images).
+- **Snapshots**: A single measurement run. It acts as the bridge connecting a specific Parcel, a specific Methodology, and a specific Date Range.
+- **Measurements**: The actual computed index values (e.g., the mean NDVI value of the parcel).
+- **Imagery Sources**: A permanent audit trail logging the exact raw satellite imagery used to calculate a specific Snapshot.
 
 ## Project Structure
 
-This repository is set up with the backend service structured as follows:
+This repository is a monorepo containing both the Go backend and the frontend.
 
 ```text
-backend/
-├── cmd/
-│   └── api/
-│       └── main.go              # Entry point for the Go API
-├── internal/
-│   ├── config/                  # Environment variables & DB connection config
-│   ├── models/                  # GORM entities (Parcel, Methodology, Snapshot, etc.)
-│   ├── repository/              # DB operations
-│   ├── service/                 # Business logic
-│   ├── handler/                 # HTTP handlers
-│   └── database/                # GORM connection + AutoMigrate
-├── migrations/                  # SQL scripts (e.g., PostGIS extension setup)
-├── gee-service/                 # Python microservice for Google Earth Engine (WIP)
-├── go.mod                       # Go module definitions
-└── .env.example                 # Example environment variables
+/
+├── frontend/                    # Next.js / React application
+└── backend/                     # Go + PostGIS API
+    ├── cmd/api/main.go          # Entry point for the Go API
+    ├── internal/
+    │   ├── config/              # Environment variables & DB connection config
+    │   ├── models/              # GORM entities mapped to PostGIS tables
+    │   ├── repository/          # DB operations
+    │   ├── service/             # Business logic
+    │   ├── handler/             # HTTP handlers
+    │   └── database/            # Database connection
+    ├── migrations/              # Core SQL scripts defining the PostGIS schema
+    ├── gee-service/             # Python microservice for Google Earth Engine (WIP)
+    ├── go.mod                   # Go module definitions
+    └── .env.example             # Example environment variables
 ```
 
 ## Prerequisites
 
 - **Go** (1.20+)
-- **PostgreSQL** with the **PostGIS** extension
+- **PostgreSQL** with the **PostGIS** extension enabled
+- **Node.js** (for the frontend)
 - **Python** (for the Google Earth Engine microservice)
 
 ## Setup Instructions
 
-1. **Database Setup**
-   Ensure you have PostgreSQL running with PostGIS installed. Connect to your database and run the initial migration:
-   ```sql
-   CREATE EXTENSION IF NOT EXISTS postgis;
-   ```
-   *(This is also included in `backend/migrations/001_initial_schema.sql`)*
+### 1. Database Setup
+Ensure you have PostgreSQL running with PostGIS installed. Connect to your database and run the initial migration script found at `backend/migrations/001_initial_schema.sql` to generate the strict geospatial tables.
 
-2. **Environment Variables**
-   Navigate to the `backend` directory and copy the `.env.example` file:
-   ```bash
-   cd backend
-   cp .env.example .env
-   ```
-   Update the `DATABASE_URL` inside `.env` to match your local PostgreSQL credentials.
+### 2. Backend API
+Navigate to the `backend` directory, set up your `.env` file from the example, and run the server:
+```bash
+cd backend
+cp .env.example .env
+# Edit .env with your PostgreSQL DATABASE_URL
+go mod tidy
+go run cmd/api/main.go
+```
 
-3. **Run the Go Server**
-   From the `backend` directory, download dependencies and start the API:
-   ```bash
-   go mod tidy
-   go run cmd/api/main.go
-   ```
-   The server will auto-migrate the database tables via GORM on startup and run on the configured `PORT` (default is 8080).
+### 3. Frontend
+Navigate to the `frontend` directory, install dependencies, and run the development server:
+```bash
+cd frontend
+npm install
+npm run dev
+```
