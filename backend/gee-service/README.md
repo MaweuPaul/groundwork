@@ -34,13 +34,13 @@ You **must** set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to th
 **Windows (PowerShell):**
 ```powershell
 $env:GOOGLE_APPLICATION_CREDENTIALS="C:\path\to\your\credentials.json"
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **macOS/Linux:**
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/credentials.json"
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## API Documentation

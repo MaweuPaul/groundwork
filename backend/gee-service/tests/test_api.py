@@ -1,17 +1,17 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
-from main import app
-from models import SnapshotRequest, MethodologyConfig
+from app.main import app
+from app.schemas.snapshot import SnapshotRequest, MethodologyConfig
 
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def mock_ee():
     """Mock the entire Earth Engine library so we don't need real auth or network calls during tests."""
-    with patch("main.ee") as mock_ee_main, patch("services.ee") as mock_ee_services:
+    with patch("app.main.ee"), patch("app.api.routes.ee") as mock_ee_routes, patch("app.services.snapshot.ee") as mock_ee_services:
         # Pretend Earth Engine is always initialized successfully
-        mock_ee_main.data.is_initialized.return_value = True
+        mock_ee_routes.data.is_initialized.return_value = True
         mock_ee_services.data.is_initialized.return_value = True
         yield mock_ee_services
 
@@ -20,10 +20,10 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
 
-@patch("main.process_snapshot")
+@patch("app.api.routes.process_snapshot")
 def test_calculate_snapshot_success(mock_process_snapshot):
     # Mock the return value of process_snapshot
-    from models import SnapshotResponse, ImagerySource
+    from app.schemas.snapshot import SnapshotResponse, ImagerySource
     mock_process_snapshot.return_value = SnapshotResponse(
         measurements={"ndvi_mean": 0.5},
         imagery_sources=[
