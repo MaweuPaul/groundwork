@@ -16,24 +16,26 @@ Groundwork relies on a strict, auditable geospatial database using PostgreSQL an
 
 ## Project Structure
 
-This repository is a monorepo containing both the Go backend and the frontend.
+This repository is a monorepo containing the frontend and two separate backend services.
 
 ```text
 /
 ├── frontend/                    # Next.js / React application
-└── backend/                     # Go + PostGIS API
-    ├── cmd/api/main.go          # Entry point for the Go API
-    ├── internal/
-    │   ├── config/              # Environment variables & DB connection config
-    │   ├── models/              # GORM entities mapped to PostGIS tables
-    │   ├── repository/          # DB operations
-    │   ├── service/             # Business logic
-    │   ├── handler/             # HTTP handlers
-    │   └── database/            # Database connection
-    ├── migrations/              # Core SQL scripts defining the PostGIS schema
-    ├── gee-service/             # Python microservice for Google Earth Engine (WIP)
-    ├── go.mod                   # Go module definitions
-    └── .env.example             # Example environment variables
+└── backend/
+    ├── go-api/                  # Go + PostGIS API
+    │   ├── cmd/                 # API and migration entry points
+    │   ├── internal/
+    │   │   ├── config/          # Environment variables & DB connection config
+    │   │   ├── models/          # GORM entities mapped to PostGIS tables
+    │   │   ├── repository/      # DB operations
+    │   │   ├── service/         # Business logic
+    │   │   ├── handler/         # HTTP handlers
+    │   │   └── database/        # Database connection
+    │   ├── migrations/         # Core SQL scripts defining the PostGIS schema
+    │   ├── go.mod              # Go module definitions
+    │   ├── go.sum              # Go dependency checksums
+    │   └── .env.example        # Example environment variables
+    └── gee-service/            # Python microservice for Google Earth Engine (WIP)
 ```
 
 ## Prerequisites
@@ -46,12 +48,12 @@ This repository is a monorepo containing both the Go backend and the frontend.
 ## Setup Instructions
 
 ### 1. Database Setup
-Ensure you have PostgreSQL running with PostGIS installed. Connect to your database and run the initial migration script found at `backend/migrations/001_initial_schema.sql` to generate the strict geospatial tables.
+Ensure you have PostgreSQL running with PostGIS installed. Connect to your database and run the initial migration script found at `backend/go-api/migrations/001_initial_schema.sql` to generate the strict geospatial tables.
 
 ### 2. Backend API
-Navigate to the `backend` directory, set up your `.env` file from the example, and run the server:
+Navigate to the `backend/go-api` directory, set up your `.env` file from the example, and run the server:
 ```bash
-cd backend
+cd backend/go-api
 cp .env.example .env
 # Edit .env with your PostgreSQL DATABASE_URL
 go mod tidy
