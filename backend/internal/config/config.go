@@ -9,8 +9,9 @@ import (
 )
 
 type Config struct {
-	Port        string
-	DatabaseURL string
+	Port          string
+	DatabaseURL   string
+	GEEServiceURL string
 }
 
 func Load() *Config {
@@ -21,8 +22,9 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		Port:        getEnv("PORT", "8080"),
-		DatabaseURL: strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		Port:          getEnv("PORT", "8080"),
+		DatabaseURL:   strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		GEEServiceURL: getEnv("GEE_SERVICE_URL", "http://localhost:8000"),
 	}
 
 	if cfg.DatabaseURL == "" {
