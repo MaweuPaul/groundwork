@@ -34,10 +34,20 @@ func main() {
 
 	parcelHandler := handler.NewParcelHandler(parcelSvc)
 
+	userRepo := repository.NewUserRepository(db)
+	tokenRepo := repository.NewRefreshTokenRepository(db)
+	tokenSvc := service.NewTokenService(tokenRepo, []byte(cfg.JWTSecret), cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
+	authSvc := service.NewAuthService(userRepo, tokenSvc)
+	authHandler := handler.NewAuthHandler(authSvc)
+
 	// Setup Routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /parcels", parcelHandler.List)
 	mux.HandleFunc("POST /parcels", parcelHandler.Create)
+
+	mux.HandleFunc("POST /auth/register", authHandler.Register)
+	mux.HandleFunc("POST /auth/login", authHandler.Login)
+	mux.HandleFunc("POST /auth/refresh", authHandler.Refresh)
 
 	// Start server
 	log.Printf("Server starting on port %s", cfg.Port)

@@ -3,6 +3,7 @@
 .env.local
 
 # Go workspace
+.cache/
 *.exe
 *.exe~
 *.dll
