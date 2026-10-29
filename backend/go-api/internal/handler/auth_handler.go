@@ -1,11 +1,11 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 
+	"groundwork/internal/httpx"
 	"groundwork/internal/models"
 	"groundwork/internal/service"
 )
@@ -43,8 +43,8 @@ type authResponse struct {
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -54,13 +54,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, authResponse{User: user, TokenPair: pair})
+	httpx.WriteJSON(w, http.StatusCreated, authResponse{User: user, TokenPair: pair})
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -70,13 +70,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, authResponse{User: user, TokenPair: pair})
+	httpx.WriteJSON(w, http.StatusOK, authResponse{User: user, TokenPair: pair})
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -86,7 +86,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, pair)
+	httpx.WriteJSON(w, http.StatusOK, pair)
 }
 
 // writeAuthError maps service errors to status codes. Anything unexpected
@@ -95,25 +95,15 @@ func writeAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, service.ErrMissingFields),
 		errors.Is(err, service.ErrInvalidRole):
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpx.WriteError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrEmailTaken),
 		errors.Is(err, service.ErrUsernameTaken):
-		writeError(w, http.StatusConflict, err.Error())
+		httpx.WriteError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, service.ErrInvalidCredentials),
 		errors.Is(err, service.ErrInvalidRefreshToken):
-		writeError(w, http.StatusUnauthorized, err.Error())
+		httpx.WriteError(w, http.StatusUnauthorized, err.Error())
 	default:
 		log.Printf("auth: %v", err)
-		writeError(w, http.StatusInternalServerError, "something went wrong")
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 	}
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(body)
-}
-
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
 }
