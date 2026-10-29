@@ -2,10 +2,11 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
+	"groundwork/internal/httpx"
 	"groundwork/internal/models"
 	"groundwork/internal/repository"
 	"groundwork/internal/service"
@@ -32,38 +33,39 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		// get authorization header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
 		// check if it starts with "Bearer "
 		if !strings.HasPrefix(authHeader, "Bearer ") {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
 		// extract the token
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
 		// check if the token is genuine and still fresh
 		userId, err := m.tokens.ParseAccess(token)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
 		//  check if the user still exists
 		user, err := m.users.GetByID(userId)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			log.Printf("auth middleware: load user: %v", err)
+			httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 			return
 		}
 		if user == nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized") // deleted since token was issued
+			httpx.WriteError(w, http.StatusUnauthorized, "unauthorized") // deleted since token was issued
 			return
 		}
 
@@ -72,10 +74,4 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 
 	})
-}
-
-func writeError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

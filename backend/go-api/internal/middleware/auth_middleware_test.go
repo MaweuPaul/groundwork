@@ -166,7 +166,7 @@ func TestAuthenticate(t *testing.T) {
 
 		NewAuthMiddleware(tokens, broken).Authenticate(next).ServeHTTP(rec, req)
 
-		assertError(t, rec, http.StatusInternalServerError, "internal server error")
+		assertError(t, rec, http.StatusInternalServerError, "something went wrong")
 		if next.called {
 			t.Error("next handler ran after a database error")
 		}
