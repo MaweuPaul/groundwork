@@ -5,11 +5,13 @@ import (
 
 	"groundwork/internal/models"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type UserRepository interface {
 	Create(user *models.User) error
+	GetByID(id uuid.UUID) (*models.User, error)
 	GetByEmail(email string) (*models.User, error)
 	GetByUsername(username string) (*models.User, error)
 }
@@ -34,6 +36,11 @@ func (r *userRepository) GetByEmail(email string) (*models.User, error) {
 // GetByUsername returns nil, nil when no user has that username.
 func (r *userRepository) GetByUsername(username string) (*models.User, error) {
 	return r.getBy("username", username)
+}
+
+// GetByID returns nil, nil when no user has that ID.
+func (r *userRepository) GetByID(id uuid.UUID) (*models.User, error) {
+	return r.getBy("id", id.String())
 }
 
 // column is always a constant from this file, never user input.
