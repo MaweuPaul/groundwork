@@ -22,7 +22,7 @@ type Snapshot struct {
 	DateStart          time.Time      `gorm:"type:date;not null" json:"date_start"`
 	DateEnd            time.Time      `gorm:"type:date;not null" json:"date_end"`
 	Status             SnapshotStatus `gorm:"type:snapshot_status;not null;default:'pending'" json:"status"`
-	ParcelGeometry     string         `gorm:"type:geometry(Polygon,4326);not null" json:"parcel_geometry"`
+	ParcelGeometry     string         `gorm:"type:geometry(MultiPolygon,4326);not null" json:"parcel_geometry"`
 	GeometryHash       string         `gorm:"type:text;not null" json:"geometry_hash"`
 	MethodologyVersion string         `gorm:"type:text;not null" json:"methodology_version"`
 	FailureMessage     *string        `gorm:"type:text" json:"failure_message,omitempty"`
