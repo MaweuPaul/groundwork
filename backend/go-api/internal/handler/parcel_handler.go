@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"groundwork/internal/httpx"
 	"groundwork/internal/middleware"
 	"groundwork/internal/models"
+	"groundwork/internal/repository"
 	"groundwork/internal/service"
 )
 
@@ -25,7 +27,7 @@ func NewParcelHandler(service service.ParcelService) *ParcelHandler {
 type createParcelRequest struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
-	Geometry    string         `json:"geometry"`
+	Geometry    datatypes.JSON `json:"geometry"`
 	Metadata    datatypes.JSON `json:"metadata"`
 }
 
@@ -36,7 +38,7 @@ func (h *ParcelHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.Geometry) == "" {
+	if strings.TrimSpace(req.Name) == "" || len(req.Geometry) == 0 {
 		httpx.WriteError(w, http.StatusBadRequest, "name and geometry are required")
 		return
 	}
@@ -54,7 +56,12 @@ func (h *ParcelHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := middleware.UserFrom(r.Context())
-	if err := h.service.CreateParcel(user.ID, &parcel); err != nil {
+	err := h.service.CreateParcel(user.ID, &parcel)
+	if errors.Is(err, repository.ErrInvalidGeometry) {
+		httpx.WriteError(w, http.StatusBadRequest, "geometry must be a valid Polygon or MultiPolygon with no self-intersections or overlapping pieces")
+		return
+	}
+	if err != nil {
 		log.Printf("parcels: create: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return

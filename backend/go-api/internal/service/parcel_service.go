@@ -10,6 +10,7 @@ import (
 type ParcelService interface {
 	CreateParcel(ownerID uuid.UUID, parcel *models.Parcel) error
 	ListParcels(ownerID uuid.UUID) ([]models.Parcel, error)
+	GetParcelByIDForOwner(id, ownerID uuid.UUID) (*models.Parcel, error)
 }
 
 func (s *parcelService) CreateParcel(ownerID uuid.UUID, parcel *models.Parcel) error {
@@ -19,6 +20,10 @@ func (s *parcelService) CreateParcel(ownerID uuid.UUID, parcel *models.Parcel) e
 
 func (s *parcelService) ListParcels(ownerID uuid.UUID) ([]models.Parcel, error) {
 	return s.repo.ListByOwner(ownerID)
+}
+
+func (s *parcelService) GetParcelByIDForOwner(id, ownerID uuid.UUID) (*models.Parcel, error) {
+	return s.repo.GetByIDForOwner(id, ownerID)
 }
 
 type parcelService struct {

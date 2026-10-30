@@ -1,8 +1,10 @@
 # Groundwork GEE Microservice
 
-This is a lightweight Python microservice built with FastAPI that talks directly to the Google Earth Engine Python API. 
+This service does all of Groundwork's satellite calculations (NDVI and other indices) using the Google Earth Engine Python API.
 
-The Go backend communicates with this service via HTTP to calculate remote sensing metrics (like NDVI) over specific geometries.
+It does not talk to the Go API, and the Go API does not call it. PostgreSQL is the only link: the Go API queues snapshot jobs in the database, this service claims them, computes the results with Earth Engine, and writes measurements and imagery sources back. See "Go ↔ Python contract" in the [main README](../../README.md).
+
+> **Transition in progress:** the code below is still the earlier FastAPI HTTP version. It is being turned into a database worker (`python -m app.worker`); the setup steps will change with it.
 
 ## Requirements
 
