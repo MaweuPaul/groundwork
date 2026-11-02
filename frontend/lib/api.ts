@@ -1,15 +1,19 @@
 import "server-only";
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ACCESS_COOKIE } from "@/lib/session";
 import type {
+  Methodology,
   NewParcel,
   NewSnapshot,
   Parcel,
   QueuedSnapshot,
   Snapshot,
+  SnapshotSummary,
+  User,
 } from "@/lib/types";
 
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
@@ -60,6 +64,10 @@ export async function api<T>(path: string, options: Options = {}): Promise<ApiRe
 
 const id = (value: string) => encodeURIComponent(value);
 
+export const getMe = cache(() => api<User>("/me"));
+
+export const getMethodologies = () => api<Methodology[]>("/methodologies");
+
 export const getParcels = () => api<Parcel[]>("/parcels");
 
 export const getParcel = (parcelId: string) => api<Parcel>(`/parcels/${id(parcelId)}`);
@@ -71,3 +79,6 @@ export const createSnapshot = (parcelId: string, snapshot: NewSnapshot) =>
   api<QueuedSnapshot>(`/parcels/${id(parcelId)}/snapshots`, { method: "POST", body: snapshot });
 
 export const getSnapshot = (snapshotId: string) => api<Snapshot>(`/snapshots/${id(snapshotId)}`);
+
+export const getParcelSnapshots = (parcelId: string) =>
+  api<SnapshotSummary[]>(`/parcels/${id(parcelId)}/snapshots`);
