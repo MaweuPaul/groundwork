@@ -12,9 +12,10 @@ import (
 
 // App holds everything the routes need, built once at start-up.
 type App struct {
-	Auth    *middleware.AuthMiddleware
-	Users   *handler.AuthHandler
-	Parcels *handler.ParcelHandler
+	Auth      *middleware.AuthMiddleware
+	Users     *handler.AuthHandler
+	Parcels   *handler.ParcelHandler
+	Snapshots *handler.SnapshotHandler
 }
 
 // New wires repositories into services, and services into handlers.
@@ -29,12 +30,15 @@ func New(cfg *config.Config, db *gorm.DB) *App {
 	parcelRepo := repository.NewParcelRepository(db)
 	parcelSvc := service.NewParcelService(parcelRepo)
 
-	// The GEE client (service.NewGEEServiceClient(cfg.GEEServiceURL)) is added here
-	// once the snapshot service uses it.
+	// Snapshots
+	snapshotRepo := repository.NewSnapshotRepository(db)
+	methodologyRepo := repository.NewMethodologyRepository(db)
+	snapshotSvc := service.NewSnapshotService(snapshotRepo, methodologyRepo)
 
 	return &App{
-		Auth:    middleware.NewAuthMiddleware(tokenSvc, userRepo),
-		Users:   handler.NewAuthHandler(authSvc),
-		Parcels: handler.NewParcelHandler(parcelSvc),
+		Auth:      middleware.NewAuthMiddleware(tokenSvc, userRepo),
+		Users:     handler.NewAuthHandler(authSvc),
+		Parcels:   handler.NewParcelHandler(parcelSvc),
+		Snapshots: handler.NewSnapshotHandler(snapshotSvc),
 	}
 }

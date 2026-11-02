@@ -12,6 +12,7 @@ import (
 func New(a *app.App) http.Handler {
 	protected := http.NewServeMux()
 	registerParcels(protected, a)
+	registerSnapshots(protected, a)
 
 	root := http.NewServeMux()
 	registerAuth(root, a)
