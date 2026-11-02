@@ -3,11 +3,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-const API_URL = process.env.API_URL ?? "http://localhost:8080";
+import { REMEMBER_COOKIE, sessionCookies, type TokenPair } from "@/lib/session";
 
-// Matches the Go API's ACCESS_TOKEN_TTL / REFRESH_TOKEN_TTL defaults.
-const ACCESS_MAX_AGE = 15 * 60;
-const REFRESH_MAX_AGE = 30 * 24 * 60 * 60;
+const API_URL = process.env.API_URL ?? "http://localhost:8080";
 
 export type AuthFormState = {
   error?: string;
@@ -15,13 +13,8 @@ export type AuthFormState = {
   values?: Record<string, string>;
 };
 
-type TokenResponse = {
-  access_token: string;
-  refresh_token: string;
-};
-
 type ApiResult =
-  | { ok: true; data: TokenResponse }
+  | { ok: true; data: TokenPair }
   | { ok: false; status: number; error: string };
 
 async function postJSON(path: string, body: unknown): Promise<ApiResult> {
@@ -41,25 +34,16 @@ async function postJSON(path: string, body: unknown): Promise<ApiResult> {
   if (!res.ok) {
     return { ok: false, status: res.status, error: json.error ?? "Something went wrong." };
   }
-  return { ok: true, data: json as TokenResponse };
+  return { ok: true, data: json as TokenPair };
 }
 
-async function storeTokens(tokens: TokenResponse, remember: boolean) {
+async function storeTokens(tokens: TokenPair, remember: boolean) {
   const cookieStore = await cookies();
-  const base = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-  };
-
-  cookieStore.set("access_token", tokens.access_token, { ...base, maxAge: ACCESS_MAX_AGE });
-  // Without "remember me" the refresh token is a session cookie and is
-  // cleared when the browser closes.
-  cookieStore.set("refresh_token", tokens.refresh_token, {
-    ...base,
-    ...(remember ? { maxAge: REFRESH_MAX_AGE } : {}),
-  });
+  for (const cookie of sessionCookies(tokens, remember)) {
+    cookieStore.set(cookie);
+  }
+  // A previous "remember me" login on this browser mustn't carry over.
+  if (!remember) cookieStore.delete(REMEMBER_COOKIE);
 }
 
 function field(formData: FormData, name: string) {

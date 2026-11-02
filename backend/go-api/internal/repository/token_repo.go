@@ -13,7 +13,7 @@ import (
 type RefreshTokenRepository interface {
 	Create(token *models.RefreshToken) error
 	GetByHash(hash string) (*models.RefreshToken, error)
-	Revoke(id uuid.UUID) error
+	Revoke(id uuid.UUID) (bool, error)
 }
 
 // the worker: holds the database connection
@@ -44,9 +44,11 @@ func (r *refreshTokenRepository) GetByHash(hash string) (*models.RefreshToken, e
 	return &token, nil
 }
 
-// mark a token as used
-func (r *refreshTokenRepository) Revoke(id uuid.UUID) error {
-	return r.db.Model(&models.RefreshToken{}).
-		Where("id = ?", id).
-		Update("revoked_at", time.Now()).Error
+// mark a token as used; false if it was already revoked. The check and the
+// update are one statement, so two concurrent refreshes can't both revoke it.
+func (r *refreshTokenRepository) Revoke(id uuid.UUID) (bool, error) {
+	res := r.db.Model(&models.RefreshToken{}).
+		Where("id = ? AND revoked_at IS NULL", id).
+		Update("revoked_at", time.Now())
+	return res.RowsAffected == 1, res.Error
 }

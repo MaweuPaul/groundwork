@@ -21,6 +21,13 @@ type TokenPair struct {
 }
 
 var ErrInvalidRefreshToken = errors.New("invalid refresh token")
+
+// refreshReuseGrace lets a just-rotated refresh token be used again briefly.
+// Several requests (parallel page loads, other tabs) often refresh with the
+// same token at once; without this, every one but the first would sign the
+// user out. Past the window, reuse is rejected as before.
+const refreshReuseGrace = 10 * time.Second
+
 var ErrInvalidAccessToken = errors.New("invalid access token")
 
 type TokenService interface {
@@ -73,16 +80,27 @@ func (s *tokenService) Issue(userID uuid.UUID) (*TokenPair, error) {
 }
 
 // Rotate swaps a valid refresh token for a new pair and revokes the old one.
+// A token revoked within refreshReuseGrace still gets a pair of its own (a
+// concurrent request rotated it first); older reuse is rejected.
 func (s *tokenService) Rotate(rawRefreshToken string) (*TokenPair, error) {
 	stored, err := s.repo.GetByHash(hashToken(rawRefreshToken))
 	if err != nil {
 		return nil, err
 	}
-	if stored == nil || stored.RevokedAt != nil || time.Now().After(stored.ExpiresAt) {
+	now := time.Now()
+	if stored == nil || now.After(stored.ExpiresAt) {
 		return nil, ErrInvalidRefreshToken
 	}
+	if stored.RevokedAt != nil {
+		if now.Sub(*stored.RevokedAt) > refreshReuseGrace {
+			return nil, ErrInvalidRefreshToken
+		}
+		return s.Issue(stored.UserID)
+	}
 
-	if err := s.repo.Revoke(stored.ID); err != nil {
+	// If another request revoked it between the read and here, that's the
+	// same concurrent case as above, inside the grace window by definition.
+	if _, err := s.repo.Revoke(stored.ID); err != nil {
 		return nil, err
 	}
 
