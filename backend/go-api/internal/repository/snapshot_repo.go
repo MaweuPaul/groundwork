@@ -66,6 +66,7 @@ type ImagerySourceRef struct {
 type SnapshotRepository interface {
 	CreateWithJob(in NewSnapshot) (uuid.UUID, error)
 	GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDetail, error)
+	ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SnapshotSummary, error)
 }
 
 type snapshotRepository struct {
@@ -199,22 +200,12 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		}
 	}
 
-	var measurements []struct {
-		Slug  string
-		Value float64
-	}
-	err := r.db.Raw(`
-		SELECT mt.slug, m.value
-		FROM measurements m
-		JOIN measurement_types mt ON mt.id = m.measurement_type_id
-		WHERE m.snapshot_id = ?`,
-		id,
-	).Scan(&measurements).Error
+	measurements, err := measurementsBySnapshot(r.db, []uuid.UUID{id})
 	if err != nil {
 		return nil, err
 	}
-	for _, m := range measurements {
-		detail.Measurements[m.Slug] = m.Value
+	if m := measurements[id]; m != nil {
+		detail.Measurements = m
 	}
 
 	err = r.db.Raw(`
@@ -229,4 +220,66 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 	}
 
 	return detail, nil
+}
+
+// SnapshotSummary is one row of a parcel's snapshot history.
+type SnapshotSummary struct {
+	ID                 uuid.UUID          `json:"id"`
+	Status             string             `json:"status"`
+	Methodology        string             `json:"methodology"`
+	MethodologyVersion string             `json:"methodology_version"`
+	DateStart          string             `json:"date_start"`
+	DateEnd            string             `json:"date_end"`
+	CreatedAt          time.Time          `json:"created_at"`
+	CompletedAt        *time.Time         `json:"completed_at,omitempty"`
+	ChainSeq           *int64             `json:"chain_seq,omitempty"`
+	RecordHash         *string            `json:"record_hash,omitempty"`
+	Measurements       map[string]float64 `json:"measurements"`
+}
+
+// ListByParcelForOwner returns the parcel's snapshots, newest first, or
+// ErrParcelNotFound when the parcel doesn't exist or isn't the owner's.
+func (r *snapshotRepository) ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SnapshotSummary, error) {
+	var owned bool
+	err := r.db.Raw(`SELECT EXISTS (SELECT 1 FROM parcels WHERE id = ? AND owner_id = ?)`, parcelID, ownerID).
+		Scan(&owned).Error
+	if err != nil {
+		return nil, err
+	}
+	if !owned {
+		return nil, ErrParcelNotFound
+	}
+
+	snapshots := []SnapshotSummary{}
+	err = r.db.Raw(`
+		SELECT s.id, s.status, m.slug AS methodology, s.methodology_version,
+		       to_char(s.date_start, 'YYYY-MM-DD') AS date_start,
+		       to_char(s.date_end, 'YYYY-MM-DD') AS date_end,
+		       s.created_at, s.completed_at, s.chain_seq, s.record_hash
+		FROM snapshots s
+		JOIN methodologies m ON m.id = s.methodology_id
+		WHERE s.parcel_id = ?
+		ORDER BY s.created_at DESC`,
+		parcelID,
+	).Scan(&snapshots).Error
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uuid.UUID, len(snapshots))
+	for i, s := range snapshots {
+		ids[i] = s.ID
+	}
+	measurements, err := measurementsBySnapshot(r.db, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range snapshots {
+		snapshots[i].Measurements = measurements[snapshots[i].ID]
+		if snapshots[i].Measurements == nil {
+			snapshots[i].Measurements = map[string]float64{}
+		}
+	}
+
+	return snapshots, nil
 }

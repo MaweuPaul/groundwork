@@ -98,3 +98,37 @@ func (h *SnapshotHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	httpx.WriteJSON(w, http.StatusOK, snapshot)
 }
+
+// ListForParcel returns a parcel's snapshot history, newest first.
+func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) {
+	parcelID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+		return
+	}
+
+	user := middleware.UserFrom(r.Context())
+	snapshots, err := h.service.ListParcelSnapshots(parcelID, user.ID)
+	if errors.Is(err, repository.ErrParcelNotFound) {
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+		return
+	}
+	if err != nil {
+		log.Printf("snapshots: list for parcel: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, snapshots)
+}
+
+func (h *SnapshotHandler) ListMethodologies(w http.ResponseWriter, r *http.Request) {
+	methodologies, err := h.service.ListMethodologies()
+	if err != nil {
+		log.Printf("methodologies: list: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, methodologies)
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"groundwork/internal/models"
 	"groundwork/internal/repository"
 
 	"github.com/google/uuid"
@@ -39,6 +40,8 @@ type CreateSnapshotInput struct {
 type SnapshotService interface {
 	CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, error)
 	GetSnapshot(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error)
+	ListParcelSnapshots(parcelID, ownerID uuid.UUID) ([]repository.SnapshotSummary, error)
+	ListMethodologies() ([]models.Methodology, error)
 }
 
 type snapshotService struct {
@@ -54,6 +57,15 @@ func NewSnapshotService(snapshots repository.SnapshotRepository, methodologies r
 // GetSnapshot returns nil, nil when the snapshot doesn't exist or isn't the owner's.
 func (s *snapshotService) GetSnapshot(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error) {
 	return s.snapshots.GetByIDForOwner(id, ownerID)
+}
+
+// ListParcelSnapshots returns repository.ErrParcelNotFound for someone else's parcel.
+func (s *snapshotService) ListParcelSnapshots(parcelID, ownerID uuid.UUID) ([]repository.SnapshotSummary, error) {
+	return s.snapshots.ListByParcelForOwner(parcelID, ownerID)
+}
+
+func (s *snapshotService) ListMethodologies() ([]models.Methodology, error) {
+	return s.methodologies.List()
 }
 
 // CreateSnapshot validates the request and queues the snapshot. The job is picked

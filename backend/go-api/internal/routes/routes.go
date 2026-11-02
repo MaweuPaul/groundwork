@@ -11,6 +11,7 @@ import (
 // everything else goes through Authenticate.
 func New(a *app.App) http.Handler {
 	protected := http.NewServeMux()
+	registerUsers(protected, a)
 	registerParcels(protected, a)
 	registerSnapshots(protected, a)
 

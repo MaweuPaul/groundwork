@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"groundwork/internal/httpx"
+	"groundwork/internal/middleware"
 	"groundwork/internal/models"
 	"groundwork/internal/service"
 )
@@ -106,4 +107,27 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		log.Printf("auth: %v", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 	}
+}
+
+// Logout ends the session behind the refresh token. It is public, because the
+// access token may already have expired, and always answers 204.
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.RefreshToken != "" {
+		if err := h.service.Logout(req.RefreshToken); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	httpx.WriteJSON(w, http.StatusOK, middleware.UserFrom(r.Context()))
 }

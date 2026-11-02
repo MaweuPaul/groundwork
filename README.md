@@ -65,7 +65,9 @@ This repository is a monorepo containing the frontend and two separate backend s
 
 - `POST /auth/register`: creates a user (`email`, `password`, `first_name`, `last_name`, `username`, `role`) and returns the user plus a token pair.
 - `POST /auth/login`: returns the user plus a token pair. Unknown email and wrong password give the same error.
-- `POST /auth/refresh`: swaps a refresh token for a new pair. Each refresh token works once.
+- `POST /auth/refresh`: swaps a refresh token for a new pair. Each refresh token works once; a token rotated in the last 10 seconds may be reused, so parallel requests and tabs don't sign the user out.
+- `POST /auth/logout`: `refresh_token`; ends that session at once (no reuse window). Always 204.
+- `GET /me`: the signed-in user.
 
 Access tokens are short-lived HS256 JWTs (default 15 minutes). Refresh tokens are random 32-byte values (default 30 days), stored only as SHA-256 hashes and rotated on every use. Passwords are hashed with bcrypt.
 
@@ -75,7 +77,7 @@ Every route outside `/auth/*` requires `Authorization: Bearer <access token>` (4
 
 ## Parcels
 
-- `GET /parcels`: the signed-in user's parcels, newest first.
+- `GET /parcels`: the signed-in user's parcels, newest first. Each includes `centroid_lon`/`centroid_lat`, `latest_snapshot` (most recent, any status) and `latest_result` (measurements of the most recent completed snapshot); both are `null` when there are none.
 - `GET /parcels/{id}`: one parcel. 404 if it doesn't exist or belongs to someone else.
 - `POST /parcels` (`asset_holder` only): `name`, `geometry` (GeoJSON `Polygon` or `MultiPolygon`), optional `description` and `metadata`. The owner is always the signed-in user; `id`, `owner_id`, `area_ha` and timestamps in the body are ignored. Returns 201 with the saved parcel, including the computed `area_ha`. Invalid geometry returns 400.
 
@@ -86,6 +88,8 @@ Geometry is always returned as a GeoJSON `MultiPolygon`.
 - `POST /parcels/{id}/snapshots` (`asset_holder`, own parcels only): `methodology` (slug), `methodology_version` (required; never defaults to the latest), `date_start`, `date_end` (`YYYY-MM-DD`). Returns **202** with `{"id", "status": "pending"}` and a `Location: /snapshots/{id}` header; the Python worker computes it in the background.
   - In one transaction, the snapshot copies the parcel's current geometry, stores a `geometry_hash` of a normalised copy (coordinates snapped to ~1 cm, points in a standard order, so the same boundary always hashes the same), and queues its job.
   - 400 if a date is malformed, `date_end` is before `date_start` or in the future, `date_start` is before 2015-06-23 (first Sentinel-2 imagery), the range is longer than a year, or the methodology version doesn't exist. 404 if the parcel doesn't exist or isn't yours.
+- `GET /parcels/{id}/snapshots`: the parcel's snapshot history, newest first, with each snapshot's measurements and `record_hash`. 404 if the parcel doesn't exist or isn't yours.
+- `GET /methodologies`: the methodologies a snapshot can be requested with.
 - `GET /snapshots/{id}`: one snapshot of your own. Poll it after creating a snapshot until `status` is `completed` or `failed`. Returns the status (and `failure_message`), inputs (methodology, dates, `geometry_hash`), timings, `measurements` as a `{type: value}` map, `imagery_sources` (scene, satellite, acquisition time, cloud %), and once completed, `chain_seq`, `record_hash` and `prev_record_hash`. `job` shows queue progress: attempts, `next_attempt_at` while waiting to retry, and the last error code (the worker's raw message stays internal). The frozen geometry is not included. 404 if it doesn't exist or isn't yours.
 
 ## Prerequisites

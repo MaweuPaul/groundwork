@@ -28,6 +28,10 @@ func (f *fakeSnapshotRepo) GetByIDForOwner(id, ownerID uuid.UUID) (*repository.S
 	return nil, nil
 }
 
+func (f *fakeSnapshotRepo) ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]repository.SnapshotSummary, error) {
+	return nil, nil
+}
+
 type fakeMethodologyRepo struct {
 	m   *models.Methodology
 	err error
@@ -40,6 +44,10 @@ func (f *fakeMethodologyRepo) GetBySlugVersion(slug, version string) (*models.Me
 	if f.m != nil && f.m.Slug == slug && f.m.Version == version {
 		return f.m, nil
 	}
+	return nil, nil
+}
+
+func (f *fakeMethodologyRepo) List() ([]models.Methodology, error) {
 	return nil, nil
 }
 
