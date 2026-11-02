@@ -24,6 +24,10 @@ func (f *fakeSnapshotRepo) CreateWithJob(in repository.NewSnapshot) (uuid.UUID, 
 	return f.id, f.err
 }
 
+func (f *fakeSnapshotRepo) GetByIDForOwner(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error) {
+	return nil, nil
+}
+
 type fakeMethodologyRepo struct {
 	m   *models.Methodology
 	err error

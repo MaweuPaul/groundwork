@@ -86,6 +86,7 @@ Geometry is always returned as a GeoJSON `MultiPolygon`.
 - `POST /parcels/{id}/snapshots` (`asset_holder`, own parcels only): `methodology` (slug), `methodology_version` (required; never defaults to the latest), `date_start`, `date_end` (`YYYY-MM-DD`). Returns **202** with `{"id", "status": "pending"}` and a `Location: /snapshots/{id}` header; the Python worker computes it in the background.
   - In one transaction, the snapshot copies the parcel's current geometry, stores a `geometry_hash` of a normalised copy (coordinates snapped to ~1 cm, points in a standard order, so the same boundary always hashes the same), and queues its job.
   - 400 if a date is malformed, `date_end` is before `date_start` or in the future, `date_start` is before 2015-06-23 (first Sentinel-2 imagery), the range is longer than a year, or the methodology version doesn't exist. 404 if the parcel doesn't exist or isn't yours.
+- `GET /snapshots/{id}`: one snapshot of your own. Poll it after creating a snapshot until `status` is `completed` or `failed`. Returns the status (and `failure_message`), inputs (methodology, dates, `geometry_hash`), timings, `measurements` as a `{type: value}` map, `imagery_sources` (scene, satellite, acquisition time, cloud %), and once completed, `chain_seq`, `record_hash` and `prev_record_hash`. `job` shows queue progress: attempts, `next_attempt_at` while waiting to retry, and the last error code (the worker's raw message stays internal). The frozen geometry is not included. 404 if it doesn't exist or isn't yours.
 
 ## Prerequisites
 

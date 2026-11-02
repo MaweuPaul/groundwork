@@ -74,3 +74,27 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Location", "/snapshots/"+id.String())
 	httpx.WriteJSON(w, http.StatusAccepted, map[string]any{"id": id, "status": "pending"})
 }
+
+// Get returns one snapshot with its status, results and hash. Clients poll it after
+// Create until status is completed or failed. 404 covers missing and someone else's.
+func (h *SnapshotHandler) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, http.StatusNotFound, "snapshot not found")
+		return
+	}
+
+	user := middleware.UserFrom(r.Context())
+	snapshot, err := h.service.GetSnapshot(id, user.ID)
+	if err != nil {
+		log.Printf("snapshots: get: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+	if snapshot == nil {
+		httpx.WriteError(w, http.StatusNotFound, "snapshot not found")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, snapshot)
+}
