@@ -86,7 +86,7 @@ export function RegisterForm() {
         </SubmitButton>
       </div>
 
-      <p className="pt-1 text-center text-label text-muted">
+      <p className="pt-1 text-center text-label text-muted-foreground">
         Already have an account?{" "}
         <Link href="/login" className="font-medium text-primary underline underline-offset-2">
           Sign In

@@ -22,7 +22,7 @@ export function RolePicker({
 }) {
   return (
     <fieldset className="space-y-1">
-      <legend className="mb-1 text-label font-medium tracking-wider text-muted uppercase">
+      <legend className="mb-1 text-label font-medium tracking-wider text-muted-foreground uppercase">
         Account Profile
       </legend>
       <div className="grid grid-cols-2 gap-3">
@@ -45,7 +45,7 @@ export function RolePicker({
                 onChange={() => onChange(role)}
                 className="sr-only"
               />
-              <RoleIcon size={22} className={selected ? "text-secondary-fixed" : "text-secondary"} />
+              <RoleIcon size={22} className={selected ? "text-secondary-fixed" : "text-olive"} />
               <span className="min-w-0">
                 <span
                   className={`block truncate text-[15px] leading-5 font-semibold ${
@@ -56,7 +56,7 @@ export function RolePicker({
                 </span>
                 <span
                   className={`block truncate text-caption ${
-                    selected ? "text-primary-fixed-dim" : "text-muted"
+                    selected ? "text-primary-fixed-dim" : "text-muted-foreground"
                   }`}
                 >
                   {subtitle}
