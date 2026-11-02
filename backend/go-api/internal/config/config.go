@@ -12,7 +12,6 @@ import (
 type Config struct {
 	Port            string
 	DatabaseURL     string
-	GEEServiceURL   string
 	JWTSecret       string
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
@@ -28,7 +27,6 @@ func Load() *Config {
 	cfg := &Config{
 		Port:            getEnv("PORT", "8080"),
 		DatabaseURL:     strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		GEEServiceURL:   getEnv("GEE_SERVICE_URL", "http://localhost:8000"),
 		JWTSecret:       strings.TrimSpace(os.Getenv("JWT_SECRET")),
 		AccessTokenTTL:  getDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
 		RefreshTokenTTL: getDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),

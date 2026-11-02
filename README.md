@@ -76,9 +76,16 @@ Every route outside `/auth/*` requires `Authorization: Bearer <access token>` (4
 ## Parcels
 
 - `GET /parcels`: the signed-in user's parcels, newest first.
+- `GET /parcels/{id}`: one parcel. 404 if it doesn't exist or belongs to someone else.
 - `POST /parcels` (`asset_holder` only): `name`, `geometry` (GeoJSON `Polygon` or `MultiPolygon`), optional `description` and `metadata`. The owner is always the signed-in user; `id`, `owner_id`, `area_ha` and timestamps in the body are ignored. Returns 201 with the saved parcel, including the computed `area_ha`. Invalid geometry returns 400.
 
 Geometry is always returned as a GeoJSON `MultiPolygon`.
+
+## Snapshots
+
+- `POST /parcels/{id}/snapshots` (`asset_holder`, own parcels only): `methodology` (slug), `methodology_version` (required; never defaults to the latest), `date_start`, `date_end` (`YYYY-MM-DD`). Returns **202** with `{"id", "status": "pending"}` and a `Location: /snapshots/{id}` header; the Python worker computes it in the background.
+  - In one transaction, the snapshot copies the parcel's current geometry, stores a `geometry_hash` of a normalised copy (coordinates snapped to ~1 cm, points in a standard order, so the same boundary always hashes the same), and queues its job.
+  - 400 if a date is malformed, `date_end` is before `date_start` or in the future, `date_start` is before 2015-06-23 (first Sentinel-2 imagery), the range is longer than a year, or the methodology version doesn't exist. 404 if the parcel doesn't exist or isn't yours.
 
 ## Prerequisites
 
@@ -112,7 +119,6 @@ Edit `.env`:
 | `PORT` | no | Defaults to `8080`. |
 | `ACCESS_TOKEN_TTL` | no | Defaults to `15m`. |
 | `REFRESH_TOKEN_TTL` | no | Defaults to `720h` (30 days). |
-| `GEE_SERVICE_URL` | no | Unused. Left over from the earlier HTTP design; to be removed. |
 
 Apply migrations, then start the server:
 ```bash
@@ -185,9 +191,9 @@ When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its
 | `parcel_access` | Sharing parcels with auditors (`parcels.owner_id` is done, migration 004) |
 | `methodologies.algorithm`, `algorithm_version`, `params` (JSONB) | The executable methodology spec |
 | `snapshots.requested_by`, `input_hash`, `engine_version` | Who ran it, request fingerprint (same request returns the existing completed snapshot), which engine computed it |
-| `snapshots.record_hash`, `prev_record_hash` | Hash chain, write-once |
-| `snapshot_jobs` | Queue: status, attempts, `run_after`, lock owner and expiry, last error; an insert trigger sends `NOTIFY snapshot_jobs` |
-| `gee_worker` database role | Least-privilege login for the Python worker (see below) |
+| ✅ `snapshots.chain_seq`, `record_hash`, `prev_record_hash` | Hash chain, write-once (migration 005) |
+| ✅ `snapshot_jobs` | Queue: status, attempts, `run_after`, lock owner and expiry, last error; an insert trigger sends `NOTIFY snapshot_jobs` (migration 006) |
+| ✅ `gee_worker` database role | Least-privilege login for the Python worker (migration 006, see below) |
 | `snapshot_artifacts` | Rasters and files (index maps, change maps, thumbnails) with URI and checksum |
 | `analyses` + `analysis_snapshots` | Change analysis across snapshots; only allowed when they share methodology version and geometry hash |
 | `audit_events` | Append-only log of who did what and when |
@@ -200,9 +206,20 @@ There is no HTTP API between the services. The contract is which tables each one
 |---|---|---|
 | `users`, `parcels`, `parcel_access` | read / write | no access |
 | `methodologies`, `measurement_types` | read / write | read |
-| `snapshots` | insert (pending), read | read; update status, `started_at`, `completed_at`, `failure_message`, `engine_version` |
-| `snapshot_jobs` | insert | claim, update attempts / lock / errors |
-| `measurements`, `imagery_sources`, `snapshot_artifacts` | read | insert |
+| `snapshots` | insert (pending), read | read; changed only through the queue functions |
+| `snapshot_jobs` | insert (with the snapshot, same transaction) | read; changed only through the queue functions |
+| `measurements`, `imagery_sources`, `snapshot_artifacts` | read | read, insert |
+
+The worker has no direct `UPDATE` rights. It drives jobs through four functions, each of which checks that it still holds the job's lock:
+
+| Function | Does |
+|---|---|
+| `claim_snapshot_job(worker, lock_for)` | Claims the next due job (or one abandoned by a dead worker) and returns its inputs: job and snapshot IDs, attempt, methodology, dates, GeoJSON geometry. No row means nothing to do. |
+| `extend_snapshot_job_lock(job, worker, lock_for)` | Heartbeat during long computations. |
+| `complete_snapshot_job(job, worker)` | Called last, in the transaction that inserted the results. Completes the snapshot (the hash trigger stamps it) and returns `record_hash`. |
+| `fail_snapshot_job(job, worker, code, message, retryable)` | Retryable: re-queued with backoff (1, 2, 4… minutes, at most 1 hour) until `max_attempts`. Otherwise the job and snapshot fail with the code and message. |
+
+`worker` must be unique per running process. A worker whose lock expired and was taken over by another is refused, so two workers can never both save a result. The `gee_worker` role is created without a password; set one by hand with `ALTER ROLE gee_worker PASSWORD '...'`.
 
 The worker reads its inputs from the snapshot row itself: the frozen `parcel_geometry` (not the live parcel), the date range, and the methodology (`algorithm`, `algorithm_version`, `params`). The database triggers that freeze snapshot inputs and completed snapshots apply to both services.
 
@@ -228,7 +245,6 @@ The Python worker keeps a registry of algorithms keyed by `(algorithm, algorithm
 - The `QA60` cloud mask is empty for Sentinel-2 scenes from 2022–2024, so clouds pass through. Switch to Cloud Score+ (`GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED`).
 - Reflectance is scaled (`/10000`) only when masking is on, and the division drops image properties.
 - `satellite` and `bands` from the methodology are ignored; Sentinel-2 B8/B4 are hard-coded.
-- The Go GEE client (`service/gee_client.go`) and `GEE_SERVICE_URL` are left over from the HTTP design and will be removed.
 
 ### Phases
 

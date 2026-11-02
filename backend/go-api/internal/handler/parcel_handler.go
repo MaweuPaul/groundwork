@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"gorm.io/datatypes"
 
 	"groundwork/internal/httpx"
@@ -80,4 +81,27 @@ func (h *ParcelHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, parcels)
+}
+
+// Get returns 404 both for a missing parcel and for someone else's, so IDs can't be probed.
+func (h *ParcelHandler) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+		return
+	}
+
+	user := middleware.UserFrom(r.Context())
+	parcel, err := h.service.GetParcelByIDForOwner(id, user.ID)
+	if err != nil {
+		log.Printf("parcels: get: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+	if parcel == nil {
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, parcel)
 }
