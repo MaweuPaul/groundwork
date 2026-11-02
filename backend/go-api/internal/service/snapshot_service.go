@@ -38,6 +38,7 @@ type CreateSnapshotInput struct {
 
 type SnapshotService interface {
 	CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, error)
+	GetSnapshot(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error)
 }
 
 type snapshotService struct {
@@ -48,6 +49,11 @@ type snapshotService struct {
 
 func NewSnapshotService(snapshots repository.SnapshotRepository, methodologies repository.MethodologyRepository) SnapshotService {
 	return &snapshotService{snapshots: snapshots, methodologies: methodologies, now: time.Now}
+}
+
+// GetSnapshot returns nil, nil when the snapshot doesn't exist or isn't the owner's.
+func (s *snapshotService) GetSnapshot(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error) {
+	return s.snapshots.GetByIDForOwner(id, ownerID)
 }
 
 // CreateSnapshot validates the request and queues the snapshot. The job is picked
