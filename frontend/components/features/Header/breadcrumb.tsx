@@ -12,6 +12,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
+import { labelFromSegment } from '@/lib/paths';
 
 const labels: Record<string, string> = {
   parcels: 'Parcels',
@@ -20,7 +21,7 @@ const labels: Record<string, string> = {
 };
 
 function label(segment: string) {
-  return labels[segment] ?? 'Details';
+  return labels[segment] ?? labelFromSegment(decodeURIComponent(segment)) ?? 'Details';
 }
 
 export function BreadcrumbHeader() {

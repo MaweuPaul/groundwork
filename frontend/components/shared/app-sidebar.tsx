@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
     icon: LayoutGrid,
     roles: ['asset_holder', 'auditor'],
   },
-  { title: 'Parcel', url: '/parcel', icon: Layers, roles: ['asset_holder'] },
+  { title: 'Parcels', url: '/parcels', icon: Layers, roles: ['asset_holder'] },
   // Hidden until their pages and backend exist:
   // { title: 'Claims Registry', url: '/claims-registry', icon: ClipboardList, roles: ['auditor'] },
   // { title: 'Spectral Telemetry', url: '/spectral-telemetry', icon: Satellite, roles: ['asset_holder', 'auditor'] },

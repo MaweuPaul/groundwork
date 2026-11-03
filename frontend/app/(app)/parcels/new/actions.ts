@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 
 import { createParcel } from '@/lib/api';
+import { parcelPath } from '@/lib/paths';
 import type { MultiPolygon, Polygon } from '@/lib/types';
 
 export type ParcelFormState = {
@@ -49,5 +50,5 @@ export async function createParcelAction(
   });
   if (!result.ok) return { error: result.error, values };
 
-  redirect(`/parcels/${result.data.id}`);
+  redirect(parcelPath(result.data));
 }

@@ -37,13 +37,16 @@ const NdviTrend = ({ points }: { points: NdviPoint[] }) => {
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
 
+  const hasPoints = points.length > 0;
+
+  // Re-runs when the first result arrives: the chart container doesn't exist before then.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [hasPoints]);
 
   const latest = points.at(-1);
 

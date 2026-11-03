@@ -11,7 +11,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <SidebarProvider>
       <AppSidebar user={me.data} />
-      <SidebarInset>
+      {/* min-w-0: lets wide content (tables) scroll inside the page instead of widening it. */}
+      <SidebarInset className="min-w-0">
         <Header />
         {children}
       </SidebarInset>

@@ -1,19 +1,35 @@
 import { Satellite, TrendingUp } from 'lucide-react';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 import NdviTrend, { type NdviPoint } from '@/components/features/parcels/ndvi-trend';
 import ParcelHeader from '@/components/features/parcels/parcel-header';
-import ParcelMap from '@/components/features/parcels/parcel-map';
+import ParcelMap, { type NdviLayer } from '@/components/features/parcels/parcel-map';
 import SnapshotHistory from '@/components/features/parcels/snapshot-history';
 import Border from '@/components/shared/border';
 import LiveRefresh from '@/components/shared/live-refresh';
 import { getMethodologies, getParcel, getParcelSnapshots } from '@/lib/api';
+import { parcelPath, refFromSegment } from '@/lib/paths';
+import type { SnapshotSummary } from '@/lib/types';
 
-export default async function ParcelPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+// The worker renders the map image shortly after completion; keep refreshing for a few
+// minutes so it appears. A render that failed never gets one, hence the time limit.
+function awaitingImage(s: SnapshotSummary) {
+  return (
+    s.status === 'completed' &&
+    !s.ndvi_image &&
+    !!s.completed_at &&
+    Date.now() - Date.parse(s.completed_at) < 10 * 60_000
+  );
+}
+
+export default async function ParcelPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const ref = refFromSegment(slug);
+  if (!ref) notFound();
+
   const [parcel, snapshots, methodologies] = await Promise.all([
-    getParcel(id),
-    getParcelSnapshots(id),
+    getParcel(ref),
+    getParcelSnapshots(ref),
     getMethodologies(),
   ]);
 
@@ -22,10 +38,21 @@ export default async function ParcelPage({ params }: { params: Promise<{ id: str
     if (parcel.status === 404) notFound();
     throw new Error(parcel.error);
   }
+
+  // A renamed parcel or an old UUID link lands on the current clean URL.
+  const canonical = parcelPath(parcel.data);
+  if (`/parcels/${decodeURIComponent(slug)}` !== canonical) redirect(canonical);
   if (!snapshots.ok) throw new Error(snapshots.error);
   if (!methodologies.ok) throw new Error(methodologies.error);
 
   const inProgress = snapshots.data.some((s) => s.status === 'pending' || s.status === 'processing');
+
+  const imagePending = snapshots.data.some(awaitingImage);
+
+  // Newest first, as the API returns them.
+  const ndviLayers: NdviLayer[] = snapshots.data.flatMap((s) =>
+    s.ndvi_image ? [{ shortId: s.short_id, label: `${s.date_start} → ${s.date_end}`, image: s.ndvi_image }] : [],
+  );
 
   const trend: NdviPoint[] = snapshots.data
     .filter((s) => s.status === 'completed' && s.measurements.ndvi_mean !== undefined)
@@ -39,8 +66,8 @@ export default async function ParcelPage({ params }: { params: Promise<{ id: str
     .sort((a, b) => a.dateEnd.localeCompare(b.dateEnd));
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-      <LiveRefresh active={inProgress} />
+    <main className="flex w-full flex-col gap-6 p-6">
+      <LiveRefresh active={inProgress || imagePending} />
       <ParcelHeader parcel={parcel.data} methodologies={methodologies.data} />
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -49,7 +76,7 @@ export default async function ParcelPage({ params }: { params: Promise<{ id: str
             <Satellite className="size-5" />
             Boundary &amp; satellite imagery
           </h2>
-          <ParcelMap geometry={parcel.data.geometry} />
+          <ParcelMap geometry={parcel.data.geometry} ndviLayers={ndviLayers} />
         </Border>
 
         <Border className="flex flex-col gap-4 p-5">
@@ -66,7 +93,12 @@ export default async function ParcelPage({ params }: { params: Promise<{ id: str
         </Border>
       </div>
 
-      <SnapshotHistory snapshots={snapshots.data} />
+      <SnapshotHistory
+        snapshots={snapshots.data}
+        parcelId={parcel.data.id}
+        parcelName={parcel.data.name}
+        methodologies={methodologies.data}
+      />
     </main>
   );
 }

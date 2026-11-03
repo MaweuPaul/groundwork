@@ -13,7 +13,7 @@ export default async function OverviewPage() {
 
   if (me.data.role === 'auditor') {
     return (
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
+      <main className="flex w-full flex-col gap-6 p-6">
         <PageHeader
           eyebrow="Audit overview"
           title={`Welcome back, ${me.data.first_name}`}
@@ -28,7 +28,7 @@ export default async function OverviewPage() {
   if (!parcels.ok) throw new Error(parcels.error);
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
+    <main className="flex w-full flex-col gap-6 p-6">
       <PageHeader
         eyebrow="Portfolio overview"
         title={`Welcome back, ${me.data.first_name}`}

@@ -23,6 +23,7 @@ export type Polygon = {
 
 export type Parcel = {
   id: string;
+  short_id: string;
   owner_id: string;
   name: string;
   description: string;
@@ -35,6 +36,7 @@ export type Parcel = {
   centroid_lat: number;
   latest_snapshot: {
     id: string;
+    short_id: string;
     status: SnapshotStatus;
     created_at: string;
     completed_at?: string;
@@ -51,6 +53,14 @@ export type NewParcel = {
   description?: string;
   geometry: Polygon | MultiPolygon;
   metadata?: Record<string, unknown>;
+};
+
+// The rendered NDVI composite of a completed snapshot, drawn over the map between bounds.
+export type NdviImage = {
+  bounds: [west: number, south: number, east: number, north: number];
+  width: number;
+  height: number;
+  visualization: { min: number; max: number; palette: string[] };
 };
 
 export type SnapshotStatus = "pending" | "processing" | "completed" | "failed";
@@ -72,13 +82,19 @@ export type ImagerySource = {
 
 export type Snapshot = {
   id: string;
+  short_id: string;
   parcel_id: string;
+  parcel_short_id: string;
+  parcel_name: string;
   status: SnapshotStatus;
   failure_message?: string;
   methodology: string;
   methodology_version: string;
   date_start: string;
   date_end: string;
+  max_scene_cloud_pct: number;
+  cloud_score_threshold: number;
+  record_format: number;
   geometry_hash: string;
   created_at: string;
   started_at?: string;
@@ -89,6 +105,7 @@ export type Snapshot = {
   job?: SnapshotJob;
   measurements: Record<string, number>;
   imagery_sources: ImagerySource[];
+  ndvi_image?: NdviImage;
 };
 
 export type NewSnapshot = {
@@ -96,6 +113,9 @@ export type NewSnapshot = {
   methodology_version: string;
   date_start: string;
   date_end: string;
+  // Omitted means the methodology's default; both are sealed into the record.
+  max_scene_cloud_pct?: number;
+  cloud_score_threshold?: number;
 };
 
 export type QueuedSnapshot = {
@@ -105,16 +125,21 @@ export type QueuedSnapshot = {
 
 export type SnapshotSummary = {
   id: string;
+  short_id: string;
   status: SnapshotStatus;
+  failure_message?: string;
   methodology: string;
   methodology_version: string;
   date_start: string;
   date_end: string;
+  max_scene_cloud_pct: number;
+  cloud_score_threshold: number;
   created_at: string;
   completed_at?: string;
   chain_seq?: number;
   record_hash?: string;
   measurements: Record<string, number>;
+  ndvi_image?: NdviImage;
 };
 
 export type Methodology = {

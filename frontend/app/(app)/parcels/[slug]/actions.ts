@@ -28,14 +28,23 @@ export async function runSnapshotAction(
   if (!methodology || !methodologyVersion) return { error: 'Choose a methodology.', values };
   if (!values.date_start || !values.date_end) return { error: 'Choose a start and end date.', values };
 
+  // Range checks happen in the API, which owns the rules and returns a readable message.
+  const cloudPct = Number(field(formData, 'max_scene_cloud_pct'));
+  const threshold = Number(field(formData, 'cloud_score_threshold'));
+  if (!Number.isFinite(cloudPct) || !Number.isFinite(threshold)) {
+    return { error: 'Cloud settings must be numbers.', values };
+  }
+
   const result = await createSnapshot(parcelId, {
     methodology,
     methodology_version: methodologyVersion,
     date_start: values.date_start,
     date_end: values.date_end,
+    max_scene_cloud_pct: cloudPct,
+    cloud_score_threshold: threshold,
   });
   if (!result.ok) return { error: result.error, values };
 
-  revalidatePath(`/parcels/${parcelId}`);
+  revalidatePath('/parcels/[slug]', 'page');
   return { ok: true };
 }
