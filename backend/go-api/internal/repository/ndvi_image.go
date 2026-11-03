@@ -52,7 +52,8 @@ func ndviImagesBySnapshot(db *gorm.DB, ids []uuid.UUID) (map[uuid.UUID]*NdviImag
 // NdviPNGForOwner returns the snapshot's NDVI image, or nil when there is none or the
 // snapshot isn't the owner's.
 func (r *snapshotRepository) NdviPNGForOwner(id, ownerID uuid.UUID) ([]byte, error) {
-	var png []byte
+	// A struct, not a bare []byte: GORM reads a slice destination as a list of rows.
+	var row struct{ Png []byte }
 	res := r.db.Raw(`
 		SELECT i.png
 		FROM snapshot_ndvi_images i
@@ -60,12 +61,12 @@ func (r *snapshotRepository) NdviPNGForOwner(id, ownerID uuid.UUID) ([]byte, err
 		JOIN parcels p ON p.id = s.parcel_id
 		WHERE i.snapshot_id = ? AND p.owner_id = ? AND i.png IS NOT NULL`,
 		id, ownerID,
-	).Scan(&png)
+	).Scan(&row)
 	if res.Error != nil {
 		return nil, res.Error
 	}
 	if res.RowsAffected == 0 {
 		return nil, nil
 	}
-	return png, nil
+	return row.Png, nil
 }
