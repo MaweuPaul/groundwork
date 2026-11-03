@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 
 import { runSnapshotAction, type SnapshotFormState } from '@/app/(app)/parcels/[slug]/actions';
 import DatePicker from '@/components/shared/date-picker';
+import InfoTip from '@/components/shared/info-tip';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -40,6 +41,23 @@ export type SnapshotOptions = {
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
 const MONTH_CHOICES = [1, 2, 3, 6, 12];
+
+const HELP = {
+  window:
+    'The dates of imagery to use. Every clear Sentinel-2 view of the parcel in this range is combined into one median picture, so short gaps in coverage don’t matter.',
+  series:
+    'The whole period to cover. It is split into windows below; each becomes its own snapshot.',
+  windowLength:
+    'How much imagery goes into each data point. Longer windows have more clear views but blur changes within them.',
+  interval:
+    'How far apart the windows start. Equal to the window length gives back-to-back readings with no gaps; larger skips the months in between, e.g. 2 months every 12 compares the same season each year.',
+  methodology:
+    'The exact, versioned recipe used to compute the result. It is sealed into the record, so anyone can rerun it and check the numbers.',
+  cloud:
+    'Sentinel-2 rates each whole scene (~100 × 100 km) by cloud cover. Scenes above this limit are skipped. Clouds over your parcel are still removed pixel by pixel, so a higher limit often finds clear views in rainy seasons.',
+  mask:
+    'How sure Cloud Score+ must be that a pixel is clear before it is used. Strict avoids haze but keeps fewer pixels; lenient keeps more in cloudy seasons.',
+};
 const MAX_WINDOWS = 24;
 
 // Same rule as the API: a window every `interval` months, `length` months long, the last
@@ -185,7 +203,12 @@ const RunSnapshotDialog = ({
 
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-2 flex w-full justify-between text-label font-semibold">
-                {mode === 'series' ? 'Series range' : 'Observation window'}
+                <span className="flex items-center gap-1.5">
+                  {mode === 'series' ? 'Series range' : 'Observation window'}
+                  <InfoTip label={mode === 'series' ? 'the series range' : 'the observation window'}>
+                    {mode === 'series' ? HELP.series : HELP.window}
+                  </InfoTip>
+                </span>
                 <span className="font-mono text-micro font-normal text-muted-foreground">
                   {mode === 'series' ? 'UTC · up to 24 windows' : 'UTC · max one year'}
                 </span>
@@ -225,12 +248,15 @@ const RunSnapshotDialog = ({
                 <div className="grid grid-cols-2 gap-3">
                   {(
                     [
-                      ['Window length', windowMonths, setWindowMonths],
-                      ['A window every', intervalMonths, setIntervalMonths],
+                      ['Window length', windowMonths, setWindowMonths, HELP.windowLength],
+                      ['A window every', intervalMonths, setIntervalMonths, HELP.interval],
                     ] as const
-                  ).map(([label, value, set]) => (
+                  ).map(([label, value, set, help]) => (
                     <label key={label} className="flex flex-col gap-1.5">
-                      <span className={labelClass}>{label}</span>
+                      <span className={`${labelClass} flex items-center gap-1.5`}>
+                        {label}
+                        <InfoTip label={label.toLowerCase()}>{help}</InfoTip>
+                      </span>
                       <select value={value} onChange={(e) => set(Number(e.target.value))} className={`${inputClass} appearance-none`}>
                         {MONTH_CHOICES.map((n) => (
                           <option key={n} value={n}>
@@ -262,7 +288,10 @@ const RunSnapshotDialog = ({
 
             <div className="flex flex-col gap-1.5">
               <label htmlFor="methodology" className="text-label font-semibold">
-                Processing methodology
+                <span className="flex items-center gap-1.5">
+                  Processing methodology
+                  <InfoTip label="a methodology">{HELP.methodology}</InfoTip>
+                </span>
               </label>
               <div className="relative">
                 <select
@@ -296,7 +325,10 @@ const RunSnapshotDialog = ({
 
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="max_scene_cloud_pct" className={labelClass}>
-                  Max scene cloud cover
+                  <span className="flex items-center gap-1.5">
+                    Max scene cloud cover
+                    <InfoTip label="max scene cloud cover">{HELP.cloud}</InfoTip>
+                  </span>
                 </label>
                 <div className="flex flex-wrap items-center gap-2">
                   {CLOUD_PRESETS.map((pct) => (
@@ -333,7 +365,10 @@ const RunSnapshotDialog = ({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <span className={labelClass}>Clear-pixel mask</span>
+                <span className={`${labelClass} flex items-center gap-1.5`}>
+                  Clear-pixel mask
+                  <InfoTip label="the clear-pixel mask">{HELP.mask}</InfoTip>
+                </span>
                 <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Clear-pixel mask">
                   {MASKS.map((mask) => (
                     <button
