@@ -39,6 +39,25 @@ export type SnapshotOptions = {
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
+const MONTH_CHOICES = [1, 2, 3, 6, 12];
+const MAX_WINDOWS = 24;
+
+// Same rule as the API: a window every `interval` months, `length` months long, the last
+// one cut short at the end date.
+function seriesWindows(start: string, end: string, length: number, interval: number) {
+  const windows: [string, string][] = [];
+  for (let i = 0; windows.length <= MAX_WINDOWS; i++) {
+    const ws = new Date(`${start}T00:00:00Z`);
+    ws.setUTCMonth(ws.getUTCMonth() + i * interval);
+    if (isoDay(ws) > end) break;
+    const we = new Date(ws);
+    we.setUTCMonth(we.getUTCMonth() + length);
+    we.setUTCDate(we.getUTCDate() - 1);
+    windows.push([isoDay(ws), isoDay(we) > end ? end : isoDay(we)]);
+  }
+  return windows;
+}
+
 function defaultRange() {
   const end = new Date();
   end.setUTCDate(end.getUTCDate() - 1);
@@ -79,6 +98,9 @@ const RunSnapshotDialog = ({
   const [methodologyKey, setMethodologyKey] = useState(first ? `${first.slug}@${first.version}` : '');
   const [cloudPct, setCloudPct] = useState(String(initial?.maxSceneCloudPct ?? first?.max_cloud_pct ?? 20));
   const [threshold, setThreshold] = useState(initial?.cloudScoreThreshold ?? 0.6);
+  const [mode, setMode] = useState<'single' | 'series'>('single');
+  const [windowMonths, setWindowMonths] = useState(1);
+  const [intervalMonths, setIntervalMonths] = useState(3);
 
   const [state, formAction, pending] = useActionState(
     async (prev: SnapshotFormState, formData: FormData) => {
@@ -91,6 +113,8 @@ const RunSnapshotDialog = ({
 
   const selected = methodologies.find((m) => `${m.slug}@${m.version}` === methodologyKey);
   const today = isoDay(new Date());
+  const windows = mode === 'series' ? seriesWindows(dateStart, dateEnd, windowMonths, intervalMonths) : [];
+  const tooMany = windows.length > MAX_WINDOWS;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -119,6 +143,9 @@ const RunSnapshotDialog = ({
         <form action={formAction} className="flex min-h-0 flex-col">
           <input type="hidden" name="parcel_id" value={parcelId} />
           <input type="hidden" name="cloud_score_threshold" value={threshold} />
+          <input type="hidden" name="mode" value={mode} />
+          <input type="hidden" name="window_months" value={windowMonths} />
+          <input type="hidden" name="interval_months" value={intervalMonths} />
 
           <div className="flex flex-col gap-5 overflow-y-auto px-6 py-5">
             {state.error && (
@@ -137,11 +164,30 @@ const RunSnapshotDialog = ({
               </p>
             )}
 
+            {!initial && (
+              <div className="grid grid-cols-2 gap-1 rounded-md bg-surface-container p-1" role="radiogroup" aria-label="Run type">
+                {(['single', 'series'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={mode === m}
+                    onClick={() => setMode(m)}
+                    className={`rounded-sm px-3 py-2 text-label font-semibold transition-colors ${
+                      mode === m ? 'bg-primary text-primary-foreground' : 'hover:bg-surface-lowest'
+                    }`}
+                  >
+                    {m === 'single' ? 'Single snapshot' : 'Time series'}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-2 flex w-full justify-between text-label font-semibold">
-                Observation window
+                {mode === 'series' ? 'Series range' : 'Observation window'}
                 <span className="font-mono text-micro font-normal text-muted-foreground">
-                  UTC · max one year
+                  {mode === 'series' ? 'UTC · up to 24 windows' : 'UTC · max one year'}
                 </span>
               </legend>
               <div className="grid grid-cols-2 gap-3">
@@ -173,6 +219,46 @@ const RunSnapshotDialog = ({
                 </div>
               </div>
             </fieldset>
+
+            {mode === 'series' && (
+              <div className="flex flex-col gap-3 rounded-md border border-border p-4">
+                <div className="grid grid-cols-2 gap-3">
+                  {(
+                    [
+                      ['Window length', windowMonths, setWindowMonths],
+                      ['A window every', intervalMonths, setIntervalMonths],
+                    ] as const
+                  ).map(([label, value, set]) => (
+                    <label key={label} className="flex flex-col gap-1.5">
+                      <span className={labelClass}>{label}</span>
+                      <select value={value} onChange={(e) => set(Number(e.target.value))} className={`${inputClass} appearance-none`}>
+                        {MONTH_CHOICES.map((n) => (
+                          <option key={n} value={n}>
+                            {n} {n === 1 ? 'month' : 'months'}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <span className={labelClass}>
+                    {tooMany ? `Over ${MAX_WINDOWS} windows: shorten the range or widen the interval` : `${windows.length} windows`}
+                  </span>
+                  <ol className="mt-1.5 max-h-32 overflow-y-auto font-mono text-caption text-muted-foreground">
+                    {windows.slice(0, MAX_WINDOWS).map(([ws, we], i) => (
+                      <li key={ws}>
+                        {String(i + 1).padStart(2, '0')}. {ws} → {we}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <p className="text-caption text-muted-foreground">
+                  Each window is its own snapshot, sealed on its own. When all have finished, the series is sealed
+                  with one hash over every window&apos;s result, so none can be left out later.
+                </p>
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <label htmlFor="methodology" className="text-label font-semibold">
@@ -287,9 +373,9 @@ const RunSnapshotDialog = ({
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" size="lg" disabled={pending || !selected}>
+            <Button type="submit" size="lg" disabled={pending || !selected || tooMany || (mode === 'series' && !windows.length)}>
               <CirclePlay />
-              {pending ? 'Queuing…' : 'Start snapshot'}
+              {pending ? 'Queuing…' : mode === 'series' ? `Start ${windows.length} snapshots` : 'Start snapshot'}
             </Button>
           </DialogFooter>
         </form>

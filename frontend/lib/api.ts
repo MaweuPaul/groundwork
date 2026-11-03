@@ -8,9 +8,12 @@ import { ACCESS_COOKIE } from "@/lib/session";
 import type {
   Methodology,
   NewParcel,
+  NewSeries,
   NewSnapshot,
   Parcel,
   QueuedSnapshot,
+  SeriesRef,
+  SeriesSummary,
   Snapshot,
   SnapshotSummary,
   User,
@@ -79,6 +82,11 @@ export const createSnapshot = (parcelId: string, snapshot: NewSnapshot) =>
   api<QueuedSnapshot>(`/parcels/${id(parcelId)}/snapshots`, { method: "POST", body: snapshot });
 
 export const getSnapshot = (snapshotId: string) => api<Snapshot>(`/snapshots/${id(snapshotId)}`);
+
+export const createSeries = (parcelId: string, series: NewSeries) =>
+  api<SeriesRef>(`/parcels/${id(parcelId)}/series`, { method: "POST", body: series });
+
+export const getParcelSeries = (parcelId: string) => api<SeriesSummary[]>(`/parcels/${id(parcelId)}/series`);
 
 export const getParcelSnapshots = (parcelId: string) =>
   api<SnapshotSummary[]>(`/parcels/${id(parcelId)}/snapshots`);

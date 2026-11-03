@@ -140,6 +140,29 @@ export type SnapshotSummary = {
   record_hash?: string;
   measurements: Record<string, number>;
   ndvi_image?: NdviImage;
+  series_short_id?: string;
+};
+
+export type NewSeries = NewSnapshot & { window_months: number; interval_months: number };
+
+export type SeriesRef = { id: string; short_id: string; windows: number };
+
+// A time series: one snapshot per window, sealed as a set once every window finishes.
+export type SeriesSummary = {
+  id: string;
+  short_id: string;
+  date_start: string;
+  date_end: string;
+  window_months: number;
+  interval_months: number;
+  max_scene_cloud_pct: number;
+  cloud_score_threshold: number;
+  windows: number;
+  completed: number;
+  failed: number;
+  record_hash?: string;
+  sealed_at?: string;
+  created_at: string;
 };
 
 export type Methodology = {

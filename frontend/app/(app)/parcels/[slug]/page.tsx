@@ -4,10 +4,11 @@ import { notFound, redirect } from 'next/navigation';
 import NdviTrend, { type NdviPoint } from '@/components/features/parcels/ndvi-trend';
 import ParcelHeader from '@/components/features/parcels/parcel-header';
 import ParcelMap, { type NdviLayer } from '@/components/features/parcels/parcel-map';
+import SeriesPanel from '@/components/features/parcels/series-panel';
 import SnapshotHistory from '@/components/features/parcels/snapshot-history';
 import Border from '@/components/shared/border';
 import LiveRefresh from '@/components/shared/live-refresh';
-import { getMethodologies, getParcel, getParcelSnapshots } from '@/lib/api';
+import { getMethodologies, getParcel, getParcelSeries, getParcelSnapshots } from '@/lib/api';
 import { parcelPath, refFromSegment } from '@/lib/paths';
 import type { SnapshotSummary } from '@/lib/types';
 
@@ -27,10 +28,11 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
   const ref = refFromSegment(slug);
   if (!ref) notFound();
 
-  const [parcel, snapshots, methodologies] = await Promise.all([
+  const [parcel, snapshots, methodologies, series] = await Promise.all([
     getParcel(ref),
     getParcelSnapshots(ref),
     getMethodologies(),
+    getParcelSeries(ref),
   ]);
 
   // The API answers 404 for both a missing parcel and someone else's.
@@ -44,6 +46,7 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
   if (`/parcels/${decodeURIComponent(slug)}` !== canonical) redirect(canonical);
   if (!snapshots.ok) throw new Error(snapshots.error);
   if (!methodologies.ok) throw new Error(methodologies.error);
+  if (!series.ok) throw new Error(series.error);
 
   const inProgress = snapshots.data.some((s) => s.status === 'pending' || s.status === 'processing');
 
@@ -92,6 +95,8 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
           <NdviTrend points={trend} />
         </Border>
       </div>
+
+      <SeriesPanel series={series.data} />
 
       <SnapshotHistory
         snapshots={snapshots.data}

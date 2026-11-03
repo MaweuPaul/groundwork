@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { createSnapshot } from '@/lib/api';
+import { createSeries, createSnapshot } from '@/lib/api';
 
 export type SnapshotFormState = {
   ok?: boolean;
@@ -35,14 +35,22 @@ export async function runSnapshotAction(
     return { error: 'Cloud settings must be numbers.', values };
   }
 
-  const result = await createSnapshot(parcelId, {
+  const request = {
     methodology,
     methodology_version: methodologyVersion,
     date_start: values.date_start,
     date_end: values.date_end,
     max_scene_cloud_pct: cloudPct,
     cloud_score_threshold: threshold,
-  });
+  };
+  const result =
+    field(formData, 'mode') === 'series'
+      ? await createSeries(parcelId, {
+          ...request,
+          window_months: Number(field(formData, 'window_months')),
+          interval_months: Number(field(formData, 'interval_months')),
+        })
+      : await createSnapshot(parcelId, request);
   if (!result.ok) return { error: result.error, values };
 
   revalidatePath('/parcels/[slug]', 'page');

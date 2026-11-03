@@ -79,6 +79,9 @@ const SnapshotHistory = ({
                     <span className="mt-1.5 block font-mono text-micro whitespace-nowrap text-muted-foreground">
                       scenes ≤{s.max_scene_cloud_pct}% · clear ≥{s.cloud_score_threshold.toFixed(2)}
                     </span>
+                    {s.series_short_id && (
+                      <span className="mt-1 block font-mono text-micro text-olive uppercase">Series {s.series_short_id}</span>
+                    )}
                   </td>
                   <td className="px-5 py-4 font-mono text-label font-semibold">
                     {formatNdvi(s.measurements.ndvi_mean)}
