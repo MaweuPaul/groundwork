@@ -1,5 +1,6 @@
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { AppSidebar } from '@/components/shared/app-sidebar';
+import Header from '@/components/shared/header';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { getMe } from '@/lib/api';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -9,11 +10,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <SidebarProvider>
-      <AppSidebar role={me.data.role} />
+      <AppSidebar user={me.data} />
       <SidebarInset>
-        <header className="flex h-14 items-center border-b border-border px-4">
-          <SidebarTrigger />
-        </header>
+        <Header />
         {children}
       </SidebarInset>
     </SidebarProvider>

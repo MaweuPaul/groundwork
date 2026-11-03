@@ -2,6 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Light only: dark: classes apply only under a .dark ancestor, never from the OS setting. */
+@custom-variant dark (&:is(.dark *));
+
 /* Groundwork palette, taken from the Stitch design system. */
 :root {
   --surface: #fff9ed;

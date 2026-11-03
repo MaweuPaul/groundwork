@@ -1,13 +1,15 @@
 'use client';
 
-import { Box, Layers, LayoutGrid, type LucideIcon } from 'lucide-react';
+import { Box, Layers, LayoutGrid, LogOut, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import type { Role } from '@/lib/types';
+import { logout } from '@/app/(auth)/actions';
+import type { Role, User } from '@/lib/types';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -25,8 +27,13 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { title: 'Overview', url: '/', icon: LayoutGrid, roles: ['asset_holder', 'auditor'] },
-  { title: 'Parcels', url: '/parcels', icon: Layers, roles: ['asset_holder'] },
+  {
+    title: 'Overview',
+    url: '/',
+    icon: LayoutGrid,
+    roles: ['asset_holder', 'auditor'],
+  },
+  { title: 'Parcel', url: '/parcel', icon: Layers, roles: ['asset_holder'] },
   // Hidden until their pages and backend exist:
   // { title: 'Claims Registry', url: '/claims-registry', icon: ClipboardList, roles: ['auditor'] },
   // { title: 'Spectral Telemetry', url: '/spectral-telemetry', icon: Satellite, roles: ['asset_holder', 'auditor'] },
@@ -34,13 +41,22 @@ const navItems: NavItem[] = [
   // { title: 'Evidence Vault', url: '/evidence-vault', icon: FolderLock, roles: ['asset_holder', 'auditor'] },
 ];
 
+const roleLabels: Record<Role, string> = {
+  asset_holder: 'Asset holder',
+  auditor: 'Auditor',
+};
+
 function isActive(pathname: string, url: string) {
-  return url === '/' ? pathname === '/' : pathname === url || pathname.startsWith(`${url}/`);
+  return url === '/'
+    ? pathname === '/'
+    : pathname === url || pathname.startsWith(`${url}/`);
 }
 
-export function AppSidebar({ role }: { role: Role }) {
+export function AppSidebar({ user }: { user: User }) {
   const pathname = usePathname();
-  const items = navItems.filter((item) => item.roles.includes(role));
+  const items = navItems.filter((item) => item.roles.includes(user.role));
+  const initials =
+    `${user.first_name[0] ?? ''}${user.last_name[0] ?? ''}`.toUpperCase();
 
   return (
     <Sidebar>
@@ -86,6 +102,34 @@ export function AppSidebar({ role }: { role: Role }) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      <SidebarFooter className="gap-2 border-t border-sidebar-border p-3">
+        <div className="flex items-center gap-3 px-1">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[12px] font-semibold text-sidebar-primary">
+            {initials}
+          </div>
+          <div className="min-w-0 leading-tight">
+            <span className="block truncate text-[13px] font-semibold text-white">
+              {user.first_name} {user.last_name}
+            </span>
+            <span className="block truncate text-[12px] text-sidebar-foreground/60">
+              {user.email}
+            </span>
+            <span className="mt-0.5 block font-mono text-micro tracking-[0.1em] text-sidebar-primary uppercase">
+              {roleLabels[user.role]}
+            </span>
+          </div>
+        </div>
+        <form action={logout}>
+          <SidebarMenuButton
+            type="submit"
+            className="h-9 gap-3 rounded-sm px-3 text-[14px] text-sidebar-foreground/85 hover:text-white"
+          >
+            <LogOut />
+            <span>Sign out</span>
+          </SidebarMenuButton>
+        </form>
+      </SidebarFooter>
     </Sidebar>
   );
 }
