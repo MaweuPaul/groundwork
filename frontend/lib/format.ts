@@ -28,3 +28,8 @@ export function timeAgo(iso: string, now = Date.now()) {
   }
   return 'just now';
 }
+
+// "2026-11-03 12:05:22 UTC": audit pages show instants in UTC, never local time.
+export function formatUtc(iso: string) {
+  return `${new Date(iso).toISOString().slice(0, 19).replace('T', ' ')} UTC`;
+}
