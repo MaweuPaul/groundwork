@@ -78,6 +78,8 @@ type SnapshotRepository interface {
 	GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDetail, error)
 	ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SnapshotSummary, error)
 	NdviPNGForOwner(id, ownerID uuid.UUID) ([]byte, error)
+	CreateSeriesWithJobs(in NewSeries) (SeriesRef, error)
+	ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SeriesSummary, error)
 }
 
 type snapshotRepository struct {
@@ -96,38 +98,42 @@ func NewSnapshotRepository(db *gorm.DB) SnapshotRepository {
 // points in a standard order), so the same boundary always hashes the same,
 // however it was drawn.
 func (r *snapshotRepository) CreateWithJob(in NewSnapshot) (uuid.UUID, error) {
-	var row struct{ ID uuid.UUID }
-
+	var id uuid.UUID
 	err := r.db.Transaction(func(tx *gorm.DB) error {
-		res := tx.Raw(`
-			INSERT INTO snapshots (parcel_id, methodology_id, methodology_version,
-			                       date_start, date_end, max_scene_cloud_pct, cloud_score_threshold,
-			                       parcel_geometry, geometry_hash)
-			SELECT p.id, ?, ?, ?::date, ?::date, ?, ?,
-			       p.geometry,
-			       encode(sha256(ST_AsEWKB(ST_Normalize(ST_SnapToGrid(p.geometry, 0.0000001)), 'NDR')), 'hex')
-			FROM parcels p
-			WHERE p.id = ? AND p.owner_id = ?
-			RETURNING id`,
-			in.MethodologyID, in.MethodologyVersion,
-			in.DateStart.Format(time.DateOnly), in.DateEnd.Format(time.DateOnly),
-			in.MaxSceneCloudPct, in.CloudScoreThreshold,
-			in.ParcelID, in.OwnerID,
-		).Scan(&row)
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected == 0 {
-			return ErrParcelNotFound
-		}
-
-		// The insert trigger notifies the worker once this transaction commits.
-		return tx.Exec(`INSERT INTO snapshot_jobs (snapshot_id) VALUES (?)`, row.ID).Error
+		var err error
+		id, err = insertSnapshotWithJob(tx, in, nil)
+		return err
 	})
-	if err != nil {
-		return uuid.Nil, err
+	return id, err
+}
+
+// insertSnapshotWithJob inserts one pending snapshot (optionally in a series) and its job.
+func insertSnapshotWithJob(tx *gorm.DB, in NewSnapshot, seriesID *uuid.UUID) (uuid.UUID, error) {
+	var row struct{ ID uuid.UUID }
+	res := tx.Raw(`
+		INSERT INTO snapshots (parcel_id, methodology_id, methodology_version,
+		                       date_start, date_end, max_scene_cloud_pct, cloud_score_threshold,
+		                       series_id, parcel_geometry, geometry_hash)
+		SELECT p.id, ?, ?, ?::date, ?::date, ?, ?, ?,
+		       p.geometry,
+		       encode(sha256(ST_AsEWKB(ST_Normalize(ST_SnapToGrid(p.geometry, 0.0000001)), 'NDR')), 'hex')
+		FROM parcels p
+		WHERE p.id = ? AND p.owner_id = ?
+		RETURNING id`,
+		in.MethodologyID, in.MethodologyVersion,
+		in.DateStart.Format(time.DateOnly), in.DateEnd.Format(time.DateOnly),
+		in.MaxSceneCloudPct, in.CloudScoreThreshold, seriesID,
+		in.ParcelID, in.OwnerID,
+	).Scan(&row)
+	if res.Error != nil {
+		return uuid.Nil, res.Error
 	}
-	return row.ID, nil
+	if res.RowsAffected == 0 {
+		return uuid.Nil, ErrParcelNotFound
+	}
+
+	// The insert trigger notifies the worker once this transaction commits.
+	return row.ID, tx.Exec(`INSERT INTO snapshot_jobs (snapshot_id) VALUES (?)`, row.ID).Error
 }
 
 // GetByIDForOwner returns nil, nil when the snapshot doesn't exist or its parcel
@@ -273,6 +279,7 @@ type SnapshotSummary struct {
 	RecordHash          *string            `json:"record_hash,omitempty"`
 	Measurements        map[string]float64 `json:"measurements"`
 	NdviImage           *NdviImageInfo     `json:"ndvi_image,omitempty"`
+	SeriesShortID       *string            `json:"series_short_id,omitempty"`
 }
 
 // ListByParcelForOwner returns the parcel's snapshots, newest first, or
@@ -294,9 +301,11 @@ func (r *snapshotRepository) ListByParcelForOwner(parcelID, ownerID uuid.UUID) (
 		       to_char(s.date_start, 'YYYY-MM-DD') AS date_start,
 		       to_char(s.date_end, 'YYYY-MM-DD') AS date_end,
 		       s.max_scene_cloud_pct, s.cloud_score_threshold,
-		       s.created_at, s.completed_at, s.chain_seq, s.record_hash
+		       s.created_at, s.completed_at, s.chain_seq, s.record_hash,
+		       r.short_id AS series_short_id
 		FROM snapshots s
 		JOIN methodologies m ON m.id = s.methodology_id
+		LEFT JOIN snapshot_series r ON r.id = s.series_id
 		WHERE s.parcel_id = ?
 		ORDER BY s.created_at DESC`,
 		parcelID,

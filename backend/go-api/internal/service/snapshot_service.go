@@ -55,6 +55,8 @@ type SnapshotService interface {
 	GetNdviImage(id, ownerID uuid.UUID) ([]byte, error)
 	ListParcelSnapshots(parcelID, ownerID uuid.UUID) ([]repository.SnapshotSummary, error)
 	ListMethodologies() ([]models.Methodology, error)
+	CreateSeries(in CreateSeriesInput) (repository.SeriesRef, error)
+	ListParcelSeries(parcelID, ownerID uuid.UUID) ([]repository.SeriesSummary, error)
 }
 
 type snapshotService struct {
@@ -95,7 +97,7 @@ func (s *snapshotService) CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, err
 		return uuid.Nil, &ValidationError{"methodology and methodology_version are required"}
 	}
 
-	start, end, err := s.parseDates(in.DateStart, in.DateEnd)
+	start, end, err := s.parseDates(in.DateStart, in.DateEnd, true)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -149,7 +151,8 @@ func cloudOptions(in CreateSnapshotInput, methodologyDefault float64) (float64, 
 	return cloudPct, threshold, nil
 }
 
-func (s *snapshotService) parseDates(rawStart, rawEnd string) (time.Time, time.Time, error) {
+// limitRange caps the range at a year; a series range can be longer because each window is short.
+func (s *snapshotService) parseDates(rawStart, rawEnd string, limitRange bool) (time.Time, time.Time, error) {
 	start, err := time.Parse(time.DateOnly, strings.TrimSpace(rawStart))
 	if err != nil {
 		return time.Time{}, time.Time{}, &ValidationError{"date_start must be a date in YYYY-MM-DD format"}
@@ -171,7 +174,7 @@ func (s *snapshotService) parseDates(rawStart, rawEnd string) (time.Time, time.T
 		return time.Time{}, time.Time{}, &ValidationError{
 			fmt.Sprintf("date_start cannot be before %s, when Sentinel-2 imagery begins", sentinel2Start.Format(time.DateOnly)),
 		}
-	case end.Sub(start) > maxSnapshotRange:
+	case limitRange && end.Sub(start) > maxSnapshotRange:
 		return time.Time{}, time.Time{}, &ValidationError{"the date range cannot be longer than one year"}
 	}
 

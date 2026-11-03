@@ -12,10 +12,11 @@ import (
 )
 
 type fakeSnapshotRepo struct {
-	got   *repository.NewSnapshot
-	id    uuid.UUID
-	err   error
-	calls int
+	got       *repository.NewSnapshot
+	gotSeries *repository.NewSeries
+	id        uuid.UUID
+	err       error
+	calls     int
 }
 
 func (f *fakeSnapshotRepo) CreateWithJob(in repository.NewSnapshot) (uuid.UUID, error) {
@@ -33,6 +34,16 @@ func (f *fakeSnapshotRepo) ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]
 }
 
 func (f *fakeSnapshotRepo) NdviPNGForOwner(id, ownerID uuid.UUID) ([]byte, error) {
+	return nil, nil
+}
+
+func (f *fakeSnapshotRepo) CreateSeriesWithJobs(in repository.NewSeries) (repository.SeriesRef, error) {
+	f.calls++
+	f.gotSeries = &in
+	return repository.SeriesRef{ID: f.id, Windows: len(in.Windows)}, f.err
+}
+
+func (f *fakeSnapshotRepo) ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUID) ([]repository.SeriesSummary, error) {
 	return nil, nil
 }
 

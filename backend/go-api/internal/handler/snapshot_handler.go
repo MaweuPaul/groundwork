@@ -128,6 +128,80 @@ func (h *SnapshotHandler) NdviImage(w http.ResponseWriter, r *http.Request) {
 	w.Write(png)
 }
 
+type createSeriesRequest struct {
+	createSnapshotRequest
+	WindowMonths   int `json:"window_months"`
+	IntervalMonths int `json:"interval_months"`
+}
+
+// CreateSeries queues one snapshot per window of the range and answers 202 at once.
+// The series is sealed by the database when its last window finishes.
+func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
+	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
+		return
+	}
+
+	var req createSeriesRequest
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	user := middleware.UserFrom(r.Context())
+	ref, err := h.service.CreateSeries(service.CreateSeriesInput{
+		CreateSnapshotInput: service.CreateSnapshotInput{
+			ParcelID:            parcelID,
+			OwnerID:             user.ID,
+			Methodology:         req.Methodology,
+			MethodologyVersion:  req.MethodologyVersion,
+			DateStart:           req.DateStart,
+			DateEnd:             req.DateEnd,
+			MaxSceneCloudPct:    req.MaxSceneCloudPct,
+			CloudScoreThreshold: req.CloudScoreThreshold,
+		},
+		WindowMonths:   req.WindowMonths,
+		IntervalMonths: req.IntervalMonths,
+	})
+
+	var invalid *service.ValidationError
+	switch {
+	case errors.Is(err, repository.ErrParcelNotFound):
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+	case errors.Is(err, service.ErrUnknownMethodology):
+		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+	case errors.As(err, &invalid):
+		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
+	case err != nil:
+		log.Printf("snapshots: create series: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+	default:
+		httpx.WriteJSON(w, http.StatusAccepted, ref)
+	}
+}
+
+// ListSeriesForParcel returns a parcel's series with progress and seals, newest first.
+func (h *SnapshotHandler) ListSeriesForParcel(w http.ResponseWriter, r *http.Request) {
+	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
+		return
+	}
+
+	user := middleware.UserFrom(r.Context())
+	series, err := h.service.ListParcelSeries(parcelID, user.ID)
+	if errors.Is(err, repository.ErrParcelNotFound) {
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+		return
+	}
+	if err != nil {
+		log.Printf("snapshots: list series: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, series)
+}
+
 // ListForParcel returns a parcel's snapshot history, newest first.
 func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) {
 	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
