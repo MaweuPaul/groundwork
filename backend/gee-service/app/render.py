@@ -32,6 +32,7 @@ EARTH_RADIUS_M = 6_378_137
 @dataclass(frozen=True)
 class ImageRequest:
     snapshot_id: UUID
+    methodology_slug: str
     geometry_geojson: str
     date_start: date
     date_end: date

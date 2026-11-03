@@ -12,7 +12,7 @@ import time
 
 import psycopg
 
-from app import compute, earth_engine, images, queue, render
+from app import earth_engine, images, queue, registry
 from app.config import ConfigError, Settings, load_settings
 from app.errors import JobError, classify
 from app.models import Job
@@ -29,7 +29,7 @@ def process(conn: psycopg.Connection, settings: Settings, job: Job) -> None:
     )
     try:
         methodology = queue.load_methodology(conn, job.methodology_id)
-        result = compute.run(job, methodology)
+        result = registry.plugin_for(methodology.slug).compute(job, methodology)
         record_hash = queue.save_and_complete(conn, job, settings.worker_id, result)
     except KeyboardInterrupt:
         # Hand the job back now instead of leaving it locked until the lock expires.
@@ -69,7 +69,11 @@ def render_next_image(conn: psycopg.Connection) -> bool:
     if req is None:
         return False
     try:
-        image = render.render(req)
+        plugin = registry.plugin_for(req.methodology_slug)
+        if plugin.render is None:
+            images.save_error(conn, req, "This methodology has no map image.")
+            return True
+        image = plugin.render(req)
     except Exception as exc:
         error = classify(exc)
         log.warning("snapshot %s: NDVI image failed: %s", req.snapshot_id, error)

@@ -4,6 +4,8 @@ Groundwork is an independent verification layer for real-world land asset claims
 
 It ingests multi-source satellite imagery (e.g., Sentinel-2 via Google Earth Engine), computes spectral indices using versioned methodology, and serves auditable time-series data over a fast Go + PostGIS backend.
 
+See [docs/architecture.md](docs/architecture.md) for diagrams of how the parts talk to each other and how to add a methodology.
+
 ## Architecture
 
 Two backend services, and they never call each other. PostgreSQL is the only thing they share.

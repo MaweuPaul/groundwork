@@ -13,12 +13,13 @@ def next_missing(conn: psycopg.Connection) -> ImageRequest | None:
     with conn.cursor(row_factory=class_row(ImageRequest)) as cur:
         cur.execute(
             """
-            SELECT s.id AS snapshot_id,
+            SELECT s.id AS snapshot_id, m.slug AS methodology_slug,
                    ST_AsGeoJSON(s.parcel_geometry) AS geometry_geojson,
                    s.date_start, s.date_end,
                    s.max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
                    s.cloud_score_threshold::float8 AS cloud_score_threshold
             FROM snapshots s
+            JOIN methodologies m ON m.id = s.methodology_id
             WHERE s.status = 'completed'
               AND NOT EXISTS (SELECT 1 FROM snapshot_ndvi_images i WHERE i.snapshot_id = s.id)
             ORDER BY s.completed_at
