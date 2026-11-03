@@ -26,6 +26,9 @@ func New(cfg *config.Config, db *gorm.DB) *App {
 	tokenSvc := service.NewTokenService(tokenRepo, []byte(cfg.JWTSecret), cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	authSvc := service.NewAuthService(userRepo, tokenSvc)
 
+	// URL ids: UUID or short ID
+	refSvc := service.NewRefService(repository.NewRefRepository(db))
+
 	// Parcels
 	parcelRepo := repository.NewParcelRepository(db)
 	parcelSvc := service.NewParcelService(parcelRepo)
@@ -38,7 +41,7 @@ func New(cfg *config.Config, db *gorm.DB) *App {
 	return &App{
 		Auth:      middleware.NewAuthMiddleware(tokenSvc, userRepo),
 		Users:     handler.NewAuthHandler(authSvc),
-		Parcels:   handler.NewParcelHandler(parcelSvc),
-		Snapshots: handler.NewSnapshotHandler(snapshotSvc),
+		Parcels:   handler.NewParcelHandler(parcelSvc, refSvc),
+		Snapshots: handler.NewSnapshotHandler(snapshotSvc, refSvc),
 	}
 }

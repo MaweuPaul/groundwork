@@ -14,7 +14,7 @@ import (
 var ErrInvalidGeometry = errors.New("invalid geometry")
 
 // Columns to read back; geometry comes out as GeoJSON instead of hex.
-const parcelColumns = `id, owner_id, name, description,
+const parcelColumns = `id, short_id, owner_id, name, description,
 	ST_AsGeoJSON(geometry) AS geometry, area_ha, metadata, created_at, updated_at,
 	ST_X(ST_Centroid(geometry)) AS centroid_lon, ST_Y(ST_Centroid(geometry)) AS centroid_lat`
 
@@ -72,7 +72,7 @@ func (r *parcelRepository) attachLatestSnapshots(parcels []models.Parcel) error 
 		models.SnapshotRef
 	}
 	err := r.db.Raw(`
-		SELECT DISTINCT ON (parcel_id) parcel_id, id, status, created_at, completed_at
+		SELECT DISTINCT ON (parcel_id) parcel_id, id, short_id, status, created_at, completed_at
 		FROM snapshots
 		WHERE parcel_id IN ?
 		ORDER BY parcel_id, created_at DESC`,
