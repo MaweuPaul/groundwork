@@ -28,9 +28,9 @@ TOO_LARGE_MESSAGE = (
 # HTTP status codes are matched as whole numbers, so a project ID like "groundwork-503310"
 # doesn't count as a 503.
 _RETRYABLE_EE = [
-    ("GEE_QUOTA", re.compile(r"quota|too many concurrent|rate limit|429")),
+    ("GEE_QUOTA", re.compile(r"quota|too many concurrent|rate limit|\b429\b")),
     ("GEE_TIMEOUT", re.compile(r"deadline|timed out|timeout")),
-    ("UPSTREAM_ERROR", re.compile(r"internal error|service unavailable|backend error|50[03]")),
+    ("UPSTREAM_ERROR", re.compile(r"internal error|service unavailable|backend error|\b50[03]\b")),
 ]
 
 

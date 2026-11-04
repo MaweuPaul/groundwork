@@ -14,6 +14,9 @@ from app.errors import JobError, classify
         ("An internal error has occurred", "UPSTREAM_ERROR", True),
         ("Geometry.polygon: Invalid geometry.", "GEE_ERROR", False),
         ("HTTP 503 Service Unavailable", "UPSTREAM_ERROR", True),
+        ("Error 503", "UPSTREAM_ERROR", True),
+        ("Error 500", "UPSTREAM_ERROR", True),
+        ("Error 429", "GEE_QUOTA", True),
         # Digits inside an ID are not a status code.
         ("Permission 'earthengine.x' denied on resource 'projects/groundwork-503310'", "GEE_ERROR", False),
     ],
