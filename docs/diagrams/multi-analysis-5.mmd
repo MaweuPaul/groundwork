@@ -1,0 +1,19 @@
+classDiagram
+    class Plugin {
+        +slug, version
+        +kind: snapshot | analysis
+        +parameter_spec()
+        +outputs()
+        +datasets()
+        +validate(parcel, parameters) quality or error
+        +compute(job) Result
+        +render(result) artifacts
+    }
+    class Result {
+        +values: key → number
+        +series: key → points
+        +artifacts: key → bytes + media type
+        +dataset_versions
+        +quality
+    }
+    Plugin ..> Result

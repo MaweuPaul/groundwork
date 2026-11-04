@@ -1,0 +1,17 @@
+flowchart TB
+    subgraph Built["Built"]
+        M["Migration: seed the methodology row<br/>and its measurement types"]
+        P["Worker: a module with compute()<br/>and optionally render()"]
+        R["Worker: register it in app/registry.py"]
+    end
+    subgraph Planned["Planned, once the first new methodology is chosen"]
+        Params["Generic parameters: each methodology declares its inputs<br/>(type, range, default, help); API validates them,<br/>the dialog renders them, record format v3 seals them"]
+        Outputs["Richer outputs: time series and artifacts<br/>(images, event polygons) hashed into the record"]
+        Prov["Dataset provenance: collection IDs and versions<br/>sealed with each record"]
+        Analyses["Analyses: sealed records built over other sealed<br/>records (series is the first; RESTREND next)"]
+        Batch["Batch exports for jobs over<br/>Earth Engine's 5-minute interactive limit"]
+    end
+    M --> P --> R
+    R -.-> Params & Outputs & Prov
+    Params -.-> Analyses
+    Outputs -.-> Batch

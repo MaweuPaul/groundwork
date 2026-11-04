@@ -1,0 +1,9 @@
+flowchart TB
+    Scenes["Satellite scenes, rainfall grids, DEM tiles<br/>(dataset ID + version)"]
+    Snap["Snapshot<br/>one methodology · one parcel · one window<br/>sealed: inputs, parameters, datasets, outputs"]
+    Series["Series<br/>many windows of one methodology<br/>sealed: settings + each window's hash"]
+    Analysis["Analysis<br/>combines sealed snapshots/series, possibly of different methodologies<br/>e.g. RESTREND = phenology series + rainfall series<br/>sealed: method + input hashes + outputs"]
+    Report["Report<br/>what a buyer, lender or exporter sees<br/>sealed: chosen analyses + wording version"]
+
+    Scenes --> Snap --> Series --> Analysis --> Report
+    Snap --> Analysis

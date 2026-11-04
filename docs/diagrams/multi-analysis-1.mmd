@@ -1,0 +1,47 @@
+flowchart LR
+    subgraph FE["Next.js"]
+        Forms["Forms generated from<br/>methodology parameter specs"]
+        Views["Result views by output kind:<br/>value · series · map · events"]
+        Reports["Report pages"]
+    end
+
+    subgraph API["Go API"]
+        Catalogue["Methodology catalogue"]
+        Validate["Validate requests against<br/>each methodology's spec"]
+        Orchestrate["Create snapshots, series,<br/>analyses, reports + jobs"]
+    end
+
+    subgraph DB["PostgreSQL + PostGIS"]
+        Specs[("methodologies<br/>+ parameter specs<br/>+ dataset list")]
+        Evidence[("snapshots · series ·<br/>analyses · reports")]
+        Outputs[("measurements · series points ·<br/>artifacts")]
+        Jobs[("job queue<br/>(snapshot + analysis jobs)")]
+        Seal["Triggers: hash every record,<br/>chain snapshots, seal parents"]
+    end
+
+    subgraph WK["Python worker"]
+        Runner["Runner: claim → plugin → save"]
+        Reg["Plugin registry"]
+        P1["ndvi-s2-median"]
+        P2["chirps-rain-season"]
+        P3["s2-phenology"]
+        P4["water-history"]
+        P5["drainage-baseline"]
+        P6["eudr-forest-check"]
+        A1["restrend (analysis)"]
+    end
+
+    subgraph GEE["Google Earth Engine"]
+        Interactive["Interactive compute<br/>(≤ 5 min)"]
+        Batch["Batch export tasks<br/>(hours)"]
+    end
+    GCS[("Cloud Storage bucket<br/>(batch results)")]
+
+    FE -- "REST + JWT" --> API
+    API -- "SQL" --> DB
+    Jobs -- "LISTEN/NOTIFY" --> Runner
+    Runner --> Reg --> P1 & P2 & P3 & P4 & P5 & P6 & A1
+    P1 & P2 & P3 & P4 & P5 & P6 --> Interactive
+    P3 & P4 --> Batch --> GCS --> Runner
+    A1 -- "reads sealed outputs only" --> DB
+    Runner -- "results via queue functions" --> DB
