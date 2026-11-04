@@ -31,7 +31,7 @@ export function Field({
       <div className="flex items-center justify-between gap-2">
         <label
           htmlFor={id}
-          className="text-label font-medium tracking-wider text-muted uppercase"
+          className="text-label font-medium tracking-wider text-muted-foreground uppercase"
         >
           {label}
         </label>
@@ -111,7 +111,7 @@ function StrengthMeter({ value }: { value: string }) {
         {passwordRules.map((rule, i) => (
           <div
             key={rule.label}
-            className={`h-1 flex-1 rounded-full ${score > i ? "bg-secondary" : "bg-surface-high"}`}
+            className={`h-1 flex-1 rounded-full ${score > i ? "bg-olive" : "bg-surface-high"}`}
           />
         ))}
       </div>
@@ -119,7 +119,7 @@ function StrengthMeter({ value }: { value: string }) {
         {passwordRules.map((rule, i) => (
           <li
             key={rule.label}
-            className={`flex items-center gap-0.5 ${results[i] ? "text-secondary" : "text-outline"}`}
+            className={`flex items-center gap-0.5 ${results[i] ? "text-olive" : "text-outline"}`}
           >
             {results[i] ? <CheckIcon size={11} /> : <DotIcon size={11} />}
             {rule.label}

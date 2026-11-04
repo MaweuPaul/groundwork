@@ -3,9 +3,11 @@ package service
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
+	"groundwork/internal/models"
 	"groundwork/internal/repository"
 
 	"github.com/google/uuid"
@@ -27,6 +29,14 @@ var sentinel2Start = time.Date(2015, 6, 23, 0, 0, 0, 0, time.UTC)
 // maxSnapshotRange keeps one Earth Engine job to at most a year of imagery.
 const maxSnapshotRange = 366 * 24 * time.Hour
 
+// Cloud Score+ cs_cdf a pixel needs to count as clear, unless the request sets one.
+// Google recommends 0.50 to 0.65; outside 0.40 to 0.80 results stop being useful.
+const (
+	defaultCloudScoreThreshold = 0.60
+	minCloudScoreThreshold     = 0.40
+	maxCloudScoreThreshold     = 0.80
+)
+
 type CreateSnapshotInput struct {
 	ParcelID           uuid.UUID
 	OwnerID            uuid.UUID
@@ -34,11 +44,19 @@ type CreateSnapshotInput struct {
 	MethodologyVersion string // required; never defaults to the latest
 	DateStart          string // YYYY-MM-DD
 	DateEnd            string // YYYY-MM-DD
+	// Optional; nil uses the methodology's max_cloud_pct and the default threshold.
+	MaxSceneCloudPct    *float64
+	CloudScoreThreshold *float64
 }
 
 type SnapshotService interface {
 	CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, error)
 	GetSnapshot(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error)
+	GetNdviImage(id, ownerID uuid.UUID) ([]byte, error)
+	ListParcelSnapshots(parcelID, ownerID uuid.UUID) ([]repository.SnapshotSummary, error)
+	ListMethodologies() ([]models.Methodology, error)
+	CreateSeries(in CreateSeriesInput) (repository.SeriesRef, error)
+	ListParcelSeries(parcelID, ownerID uuid.UUID) ([]repository.SeriesSummary, error)
 }
 
 type snapshotService struct {
@@ -51,9 +69,23 @@ func NewSnapshotService(snapshots repository.SnapshotRepository, methodologies r
 	return &snapshotService{snapshots: snapshots, methodologies: methodologies, now: time.Now}
 }
 
+// GetNdviImage returns the snapshot's NDVI map PNG, or nil when there is none or it isn't the owner's.
+func (s *snapshotService) GetNdviImage(id, ownerID uuid.UUID) ([]byte, error) {
+	return s.snapshots.NdviPNGForOwner(id, ownerID)
+}
+
 // GetSnapshot returns nil, nil when the snapshot doesn't exist or isn't the owner's.
 func (s *snapshotService) GetSnapshot(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error) {
 	return s.snapshots.GetByIDForOwner(id, ownerID)
+}
+
+// ListParcelSnapshots returns repository.ErrParcelNotFound for someone else's parcel.
+func (s *snapshotService) ListParcelSnapshots(parcelID, ownerID uuid.UUID) ([]repository.SnapshotSummary, error) {
+	return s.snapshots.ListByParcelForOwner(parcelID, ownerID)
+}
+
+func (s *snapshotService) ListMethodologies() ([]models.Methodology, error) {
+	return s.methodologies.List()
 }
 
 // CreateSnapshot validates the request and queues the snapshot. The job is picked
@@ -65,7 +97,7 @@ func (s *snapshotService) CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, err
 		return uuid.Nil, &ValidationError{"methodology and methodology_version are required"}
 	}
 
-	start, end, err := s.parseDates(in.DateStart, in.DateEnd)
+	start, end, err := s.parseDates(in.DateStart, in.DateEnd, true)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -78,17 +110,49 @@ func (s *snapshotService) CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, err
 		return uuid.Nil, ErrUnknownMethodology
 	}
 
+	cloudPct, threshold, err := cloudOptions(in, m.MaxCloudPct)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
 	return s.snapshots.CreateWithJob(repository.NewSnapshot{
-		ParcelID:           in.ParcelID,
-		OwnerID:            in.OwnerID,
-		MethodologyID:      m.ID,
-		MethodologyVersion: m.Version,
-		DateStart:          start,
-		DateEnd:            end,
+		ParcelID:            in.ParcelID,
+		OwnerID:             in.OwnerID,
+		MethodologyID:       m.ID,
+		MethodologyVersion:  m.Version,
+		DateStart:           start,
+		DateEnd:             end,
+		MaxSceneCloudPct:    cloudPct,
+		CloudScoreThreshold: threshold,
 	})
 }
 
-func (s *snapshotService) parseDates(rawStart, rawEnd string) (time.Time, time.Time, error) {
+// cloudOptions applies the defaults and checks the ranges. Values are rounded the way
+// the database stores them (2 and 3 decimals), so the sealed record matches the request.
+func cloudOptions(in CreateSnapshotInput, methodologyDefault float64) (float64, float64, error) {
+	cloudPct := methodologyDefault
+	if in.MaxSceneCloudPct != nil {
+		cloudPct = math.Round(*in.MaxSceneCloudPct*100) / 100
+	}
+	if cloudPct <= 0 || cloudPct > 100 {
+		return 0, 0, &ValidationError{"max_scene_cloud_pct must be greater than 0 and at most 100"}
+	}
+
+	threshold := defaultCloudScoreThreshold
+	if in.CloudScoreThreshold != nil {
+		threshold = math.Round(*in.CloudScoreThreshold*1000) / 1000
+	}
+	if threshold < minCloudScoreThreshold || threshold > maxCloudScoreThreshold {
+		return 0, 0, &ValidationError{
+			fmt.Sprintf("cloud_score_threshold must be between %.2f and %.2f", minCloudScoreThreshold, maxCloudScoreThreshold),
+		}
+	}
+
+	return cloudPct, threshold, nil
+}
+
+// limitRange caps the range at a year; a series range can be longer because each window is short.
+func (s *snapshotService) parseDates(rawStart, rawEnd string, limitRange bool) (time.Time, time.Time, error) {
 	start, err := time.Parse(time.DateOnly, strings.TrimSpace(rawStart))
 	if err != nil {
 		return time.Time{}, time.Time{}, &ValidationError{"date_start must be a date in YYYY-MM-DD format"}
@@ -110,7 +174,7 @@ func (s *snapshotService) parseDates(rawStart, rawEnd string) (time.Time, time.T
 		return time.Time{}, time.Time{}, &ValidationError{
 			fmt.Sprintf("date_start cannot be before %s, when Sentinel-2 imagery begins", sentinel2Start.Format(time.DateOnly)),
 		}
-	case end.Sub(start) > maxSnapshotRange:
+	case limitRange && end.Sub(start) > maxSnapshotRange:
 		return time.Time{}, time.Time{}, &ValidationError{"the date range cannot be longer than one year"}
 	}
 

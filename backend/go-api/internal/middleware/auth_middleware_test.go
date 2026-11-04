@@ -24,6 +24,7 @@ type fakeRefreshRepo struct{}
 func (fakeRefreshRepo) Create(*models.RefreshToken) error              { return nil }
 func (fakeRefreshRepo) GetByHash(string) (*models.RefreshToken, error) { return nil, nil }
 func (fakeRefreshRepo) Revoke(uuid.UUID) (bool, error)                 { return true, nil }
+func (fakeRefreshRepo) RevokeForLogout(uuid.UUID) error                { return nil }
 
 // fakeUserRepo returns users from a map, or err when set.
 type fakeUserRepo struct {

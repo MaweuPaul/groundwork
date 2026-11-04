@@ -9,6 +9,7 @@ import (
 
 type MethodologyRepository interface {
 	GetBySlugVersion(slug, version string) (*models.Methodology, error)
+	List() ([]models.Methodology, error)
 }
 
 type methodologyRepository struct {
@@ -30,4 +31,10 @@ func (r *methodologyRepository) GetBySlugVersion(slug, version string) (*models.
 		return nil, err
 	}
 	return &m, nil
+}
+
+func (r *methodologyRepository) List() ([]models.Methodology, error) {
+	methodologies := []models.Methodology{}
+	err := r.db.Order("slug, created_at").Find(&methodologies).Error
+	return methodologies, err
 }

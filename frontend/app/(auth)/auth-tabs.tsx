@@ -24,7 +24,7 @@ export function AuthTabs() {
             className={
               active
                 ? "flex-1 rounded bg-surface-lowest py-2 text-center text-body font-medium text-primary shadow-sm"
-                : "flex-1 rounded py-2 text-center text-body font-medium text-muted transition-colors hover:text-foreground"
+                : "flex-1 rounded py-2 text-center text-body font-medium text-muted-foreground transition-colors hover:text-foreground"
             }
           >
             {tab.label}

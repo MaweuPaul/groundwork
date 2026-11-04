@@ -1,50 +1,83 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Light only: dark: classes apply only under a .dark ancestor, never from the OS setting. */
+@custom-variant dark (&:is(.dark *));
 
 /* Groundwork palette, taken from the Stitch design system. */
 :root {
-  --background: #fff9ed;
   --surface: #fff9ed;
   --surface-lowest: #ffffff;
   --surface-low: #faf3e5;
   --surface-container: #f4ede0;
   --surface-high: #eee8da;
-  --foreground: #1e1c13;
-  --muted: #414844;
   --outline: #717973;
   --outline-variant: #c1c8c2;
-  --primary: #012d1d;
   --primary-container: #1b4332;
   --on-primary: #ffffff;
   --primary-fixed: #c1ecd4;
   --primary-fixed-dim: #a5d0b9;
   --surface-tint: #3f6653;
-  --secondary: #56642b;
+  --olive: #56642b;
   --secondary-container: #d6e7a1;
   --secondary-fixed: #d9eaa3;
   --on-secondary-container: #5a682f;
   --danger: #ba1a1a;
   --danger-container: #ffdad6;
   --on-danger-container: #93000a;
+
+  /* shadcn tokens, mapped onto the palette above. */
+  --background: #fff9ed;
+  --foreground: #1e1c13;
+  --card: #ffffff;
+  --card-foreground: #1e1c13;
+  --popover: #ffffff;
+  --popover-foreground: #1e1c13;
+  --primary: #012d1d;
+  --primary-foreground: #ffffff;
+  --secondary: #f4ede0;
+  --secondary-foreground: #1e1c13;
+  --muted: #f4ede0;
+  --muted-foreground: #414844;
+  --accent: #eee8da;
+  --accent-foreground: #1e1c13;
+  --destructive: #ba1a1a;
+  --border: #e2dccd;
+  --input: #c1c8c2;
+  --ring: #3f6653;
+  --radius: 0.5rem;
+
+  --chart-1: #1b4332;
+  --chart-2: #56642b;
+  --chart-3: #3f6653;
+  --chart-4: #a5d0b9;
+  --chart-5: #d6e7a1;
+
+  --sidebar: #012d1d;
+  --sidebar-foreground: #c1ecd4;
+  --sidebar-primary: #d9eaa3;
+  --sidebar-primary-foreground: #012d1d;
+  --sidebar-accent: #1b4332;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1b4332;
+  --sidebar-ring: #a5d0b9;
 }
 
 @theme inline {
-  --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-lowest: var(--surface-lowest);
   --color-surface-low: var(--surface-low);
   --color-surface-container: var(--surface-container);
   --color-surface-high: var(--surface-high);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
   --color-outline: var(--outline);
   --color-outline-variant: var(--outline-variant);
-  --color-primary: var(--primary);
   --color-primary-container: var(--primary-container);
   --color-on-primary: var(--on-primary);
   --color-primary-fixed: var(--primary-fixed);
   --color-primary-fixed-dim: var(--primary-fixed-dim);
   --color-surface-tint: var(--surface-tint);
-  --color-secondary: var(--secondary);
+  --color-olive: var(--olive);
   --color-secondary-container: var(--secondary-container);
   --color-secondary-fixed: var(--secondary-fixed);
   --color-on-secondary-container: var(--on-secondary-container);
@@ -52,7 +85,40 @@
   --color-danger-container: var(--danger-container);
   --color-on-danger-container: var(--on-danger-container);
 
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
   --font-sans: var(--font-inter);
+  --font-heading: var(--font-inter);
   --font-mono: var(--font-jetbrains-mono);
 
   /* Type scale (size / line-height) */
@@ -75,15 +141,29 @@
 
   --radius-sm: 0.125rem;
   --radius: 0.25rem;
+  --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.25rem;
+  --radius-4xl: 1.5rem;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
-  font-variant-numeric: tabular-nums;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-variant-numeric: tabular-nums;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 ::selection {

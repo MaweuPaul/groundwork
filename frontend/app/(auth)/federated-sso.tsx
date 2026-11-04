@@ -2,7 +2,7 @@ import { GlobeIcon, KeyIcon } from "./icons";
 
 const providers = [
   { label: "Copernicus / ESA", short: "Copernicus", icon: <GlobeIcon className="text-primary" /> },
-  { label: "Hardware Key (FIDO2)", short: "Security key", icon: <KeyIcon className="text-secondary" /> },
+  { label: "Hardware Key (FIDO2)", short: "Security key", icon: <KeyIcon className="text-olive" /> },
 ];
 
 // Placeholder for federated sign-in. Disabled until the API supports it.

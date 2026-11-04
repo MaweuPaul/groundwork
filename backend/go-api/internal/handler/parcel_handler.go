@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
 	"gorm.io/datatypes"
 
 	"groundwork/internal/httpx"
@@ -18,10 +17,11 @@ import (
 
 type ParcelHandler struct {
 	service service.ParcelService
+	refs    service.RefService
 }
 
-func NewParcelHandler(service service.ParcelService) *ParcelHandler {
-	return &ParcelHandler{service: service}
+func NewParcelHandler(service service.ParcelService, refs service.RefService) *ParcelHandler {
+	return &ParcelHandler{service: service, refs: refs}
 }
 
 // What a client may send. ID, owner, area and timestamps are never taken from the body.
@@ -84,10 +84,10 @@ func (h *ParcelHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get returns 404 both for a missing parcel and for someone else's, so IDs can't be probed.
+// {id} is the parcel's UUID or short ID.
 func (h *ParcelHandler) Get(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+	id, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
 		return
 	}
 

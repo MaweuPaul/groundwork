@@ -14,6 +14,7 @@ type RefreshTokenRepository interface {
 	Create(token *models.RefreshToken) error
 	GetByHash(hash string) (*models.RefreshToken, error)
 	Revoke(id uuid.UUID) (bool, error)
+	RevokeForLogout(id uuid.UUID) error
 }
 
 // the worker: holds the database connection
@@ -49,6 +50,16 @@ func (r *refreshTokenRepository) GetByHash(hash string) (*models.RefreshToken, e
 func (r *refreshTokenRepository) Revoke(id uuid.UUID) (bool, error) {
 	res := r.db.Model(&models.RefreshToken{}).
 		Where("id = ? AND revoked_at IS NULL", id).
-		Update("revoked_at", time.Now())
+		Updates(map[string]any{"revoked_at": time.Now(), "revoke_reason": "rotated"})
 	return res.RowsAffected == 1, res.Error
+}
+
+// end a session; also ends the reuse window of a token that was just rotated
+func (r *refreshTokenRepository) RevokeForLogout(id uuid.UUID) error {
+	return r.db.Model(&models.RefreshToken{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"revoked_at":    gorm.Expr("COALESCE(revoked_at, NOW())"),
+			"revoke_reason": "logout",
+		}).Error
 }

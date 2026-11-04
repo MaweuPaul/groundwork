@@ -50,11 +50,28 @@ func (m *memTokenRepo) Revoke(id uuid.UUID) (bool, error) {
 				return false, nil
 			}
 			now := time.Now()
-			t.RevokedAt = &now
+			reason := "rotated"
+			t.RevokedAt, t.RevokeReason = &now, &reason
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+func (m *memTokenRepo) RevokeForLogout(id uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.tokens {
+		if t.ID == id {
+			if t.RevokedAt == nil {
+				now := time.Now()
+				t.RevokedAt = &now
+			}
+			reason := "logout"
+			t.RevokeReason = &reason
+		}
+	}
+	return nil
 }
 
 // revokedAgo backdates a token's revocation to simulate the passage of time.
@@ -157,5 +174,41 @@ func TestRotateConcurrentRequestsAllSucceed(t *testing.T) {
 		if err != nil {
 			t.Errorf("concurrent rotate failed: %v", err)
 		}
+	}
+}
+
+func TestRevokeEndsSessionImmediately(t *testing.T) {
+	repo := newMemTokenRepo()
+	svc := newTestTokenService(repo, time.Hour)
+	pair, _ := svc.Issue(uuid.New())
+
+	if err := svc.Revoke(pair.RefreshToken); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	if _, err := svc.Rotate(pair.RefreshToken); !errors.Is(err, ErrInvalidRefreshToken) {
+		t.Fatalf("refresh after logout: err = %v, want ErrInvalidRefreshToken", err)
+	}
+}
+
+func TestRevokeEndsReuseWindowOfRotatedToken(t *testing.T) {
+	repo := newMemTokenRepo()
+	svc := newTestTokenService(repo, time.Hour)
+	pair, _ := svc.Issue(uuid.New())
+
+	if _, err := svc.Rotate(pair.RefreshToken); err != nil {
+		t.Fatalf("rotate: %v", err)
+	}
+	if err := svc.Revoke(pair.RefreshToken); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	if _, err := svc.Rotate(pair.RefreshToken); !errors.Is(err, ErrInvalidRefreshToken) {
+		t.Fatalf("reuse after logout: err = %v, want ErrInvalidRefreshToken", err)
+	}
+}
+
+func TestRevokeUnknownTokenSucceeds(t *testing.T) {
+	svc := newTestTokenService(newMemTokenRepo(), time.Hour)
+	if err := svc.Revoke("not-a-real-token"); err != nil {
+		t.Fatalf("err = %v, want nil", err)
 	}
 }

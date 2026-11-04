@@ -1,0 +1,56 @@
+erDiagram
+    METHODOLOGIES ||--o{ METHODOLOGY_OUTPUTS : declares
+    METHODOLOGIES ||--o{ SNAPSHOTS : "computed with"
+    METHODOLOGIES {
+        text slug
+        text version
+        text kind "snapshot | analysis"
+        jsonb parameter_spec "inputs: type, range, default, help"
+        date data_start "earliest data"
+        bool needs_window "false for soil, terrain"
+        jsonb datasets "Earth Engine collections used"
+    }
+    METHODOLOGY_OUTPUTS {
+        text key "ndvi_mean, rain_mm, water_events"
+        text kind "value | series | artifact"
+        text unit
+        int native_resolution_m
+    }
+    SNAPSHOTS ||--o{ MEASUREMENTS : has
+    SNAPSHOTS ||--o{ SERIES_POINTS : has
+    SNAPSHOTS ||--o{ ARTIFACTS : has
+    SNAPSHOTS {
+        jsonb parameters "canonical, sealed (record v3)"
+        jsonb dataset_versions "sealed provenance"
+        text quality "ok | insufficient_resolution | partial"
+    }
+    SERIES_POINTS {
+        text output_key
+        date observed_on
+        float value "null = no observation, never 0"
+        text source "sensor that saw it"
+    }
+    ARTIFACTS {
+        text output_key
+        text media_type "image/png, application/geo+json"
+        text sha256 "sealed"
+        bytea content
+    }
+    ANALYSES ||--o{ ANALYSIS_INPUTS : uses
+    ANALYSIS_INPUTS }o--|| SNAPSHOTS : "sealed input"
+    ANALYSES {
+        text methodology "e.g. restrend@1.0.0"
+        jsonb parameters
+        text record_hash
+    }
+    REPORTS ||--o{ REPORT_ITEMS : bundles
+    REPORT_ITEMS }o--|| ANALYSES : includes
+    REPORTS {
+        text audience "buyer | lender | exporter"
+        text wording_version "evidence, not certification"
+        text record_hash
+    }
+    REFERENCE_AREAS {
+        geometry boundary "frozen, hashed (peer benchmark)"
+        text record_hash
+    }

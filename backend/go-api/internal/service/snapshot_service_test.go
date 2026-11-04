@@ -12,10 +12,11 @@ import (
 )
 
 type fakeSnapshotRepo struct {
-	got   *repository.NewSnapshot
-	id    uuid.UUID
-	err   error
-	calls int
+	got       *repository.NewSnapshot
+	gotSeries *repository.NewSeries
+	id        uuid.UUID
+	err       error
+	calls     int
 }
 
 func (f *fakeSnapshotRepo) CreateWithJob(in repository.NewSnapshot) (uuid.UUID, error) {
@@ -25,6 +26,24 @@ func (f *fakeSnapshotRepo) CreateWithJob(in repository.NewSnapshot) (uuid.UUID, 
 }
 
 func (f *fakeSnapshotRepo) GetByIDForOwner(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error) {
+	return nil, nil
+}
+
+func (f *fakeSnapshotRepo) ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]repository.SnapshotSummary, error) {
+	return nil, nil
+}
+
+func (f *fakeSnapshotRepo) NdviPNGForOwner(id, ownerID uuid.UUID) ([]byte, error) {
+	return nil, nil
+}
+
+func (f *fakeSnapshotRepo) CreateSeriesWithJobs(in repository.NewSeries) (repository.SeriesRef, error) {
+	f.calls++
+	f.gotSeries = &in
+	return repository.SeriesRef{ID: f.id, Windows: len(in.Windows)}, f.err
+}
+
+func (f *fakeSnapshotRepo) ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUID) ([]repository.SeriesSummary, error) {
 	return nil, nil
 }
 
@@ -43,7 +62,11 @@ func (f *fakeMethodologyRepo) GetBySlugVersion(slug, version string) (*models.Me
 	return nil, nil
 }
 
-var ndvi = &models.Methodology{ID: uuid.New(), Slug: "ndvi-s2-median", Version: "1.0.0"}
+func (f *fakeMethodologyRepo) List() ([]models.Methodology, error) {
+	return nil, nil
+}
+
+var ndvi = &models.Methodology{ID: uuid.New(), Slug: "ndvi-s2-median", Version: "1.0.0", MaxCloudPct: 20}
 
 // newTestSnapshotService fixes "now" at 2026-11-02 so date rules are deterministic.
 func newTestSnapshotService(snaps *fakeSnapshotRepo, meths *fakeMethodologyRepo) *snapshotService {
@@ -90,6 +113,40 @@ func TestCreateSnapshotQueuesValidRequest(t *testing.T) {
 	}
 }
 
+func ptr(v float64) *float64 { return &v }
+
+func TestCreateSnapshotCloudOptions(t *testing.T) {
+	tests := []struct {
+		name          string
+		cloudPct      *float64
+		threshold     *float64
+		wantCloudPct  float64
+		wantThreshold float64
+	}{
+		{"defaults from the methodology", nil, nil, 20, 0.60},
+		{"custom values", ptr(60), ptr(0.5), 60, 0.5},
+		{"rounded like the database stores them", ptr(33.333), ptr(0.6256), 33.33, 0.626},
+		{"edges are allowed", ptr(100), ptr(0.4), 100, 0.4},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snaps := &fakeSnapshotRepo{id: uuid.New()}
+			svc := newTestSnapshotService(snaps, &fakeMethodologyRepo{m: ndvi})
+			in := validInput()
+			in.MaxSceneCloudPct, in.CloudScoreThreshold = tt.cloudPct, tt.threshold
+
+			if _, err := svc.CreateSnapshot(in); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if snaps.got.MaxSceneCloudPct != tt.wantCloudPct || snaps.got.CloudScoreThreshold != tt.wantThreshold {
+				t.Errorf("got %v%% / %v, want %v%% / %v",
+					snaps.got.MaxSceneCloudPct, snaps.got.CloudScoreThreshold, tt.wantCloudPct, tt.wantThreshold)
+			}
+		})
+	}
+}
+
 func TestCreateSnapshotRejectsBadInput(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -103,6 +160,10 @@ func TestCreateSnapshotRejectsBadInput(t *testing.T) {
 		{"end in the future", func(in *CreateSnapshotInput) { in.DateEnd = "2026-11-03" }},
 		{"before Sentinel-2", func(in *CreateSnapshotInput) { in.DateStart = "2015-06-22" }},
 		{"longer than a year", func(in *CreateSnapshotInput) { in.DateStart, in.DateEnd = "2023-01-01", "2024-01-03" }},
+		{"zero scene cloud", func(in *CreateSnapshotInput) { in.MaxSceneCloudPct = ptr(0) }},
+		{"scene cloud over 100", func(in *CreateSnapshotInput) { in.MaxSceneCloudPct = ptr(100.5) }},
+		{"threshold too lenient", func(in *CreateSnapshotInput) { in.CloudScoreThreshold = ptr(0.3) }},
+		{"threshold too strict", func(in *CreateSnapshotInput) { in.CloudScoreThreshold = ptr(0.85) }},
 	}
 
 	for _, tt := range tests {

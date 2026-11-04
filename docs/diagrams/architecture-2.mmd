@@ -1,0 +1,22 @@
+sequenceDiagram
+    actor U as User
+    participant FE as Next.js
+    participant API as Go API
+    participant DB as PostgreSQL
+    participant W as Worker
+    participant EE as Earth Engine
+
+    U->>FE: Run snapshot (window, cloud settings)
+    FE->>API: POST /parcels/{id}/snapshots
+    API->>DB: insert snapshot (boundary frozen) + job, one transaction
+    API-->>FE: 202 queued
+    DB-->>W: NOTIFY snapshot_jobs
+    W->>DB: claim_snapshot_job() → status processing
+    W->>EE: composite, reduce over parcel
+    EE-->>W: NDVI mean/max, clear pixels, scenes
+    W->>DB: measurements + imagery + complete_snapshot_job(), one transaction
+    Note over DB: trigger seals the record hash into the chain<br/>(and the series, if it was its last window)
+    W->>EE: render the same composite as a PNG
+    W->>DB: store the NDVI image
+    FE->>API: page refreshes itself while work is pending
+    API-->>FE: completed, record hash, image bounds

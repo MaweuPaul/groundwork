@@ -1,0 +1,20 @@
+sequenceDiagram
+    actor U as User
+    participant API as Go API
+    participant DB as PostgreSQL
+    participant W as Worker
+    participant EE as Earth Engine
+
+    U->>API: Rainfall-adjusted productivity, 2019–2025
+    API->>DB: create analysis + its child series<br/>(s2-phenology per season, chirps-rain-season per season)
+    loop each child window
+        DB-->>W: job
+        W->>EE: compute (interactive, or batch if large)
+        W->>DB: outputs + seal snapshot
+    end
+    Note over DB: last child sealed → analysis job becomes due
+    DB-->>W: analysis job
+    W->>DB: read sealed child outputs (no Earth Engine)
+    W->>W: fit NDVI integral ~ rainfall, residuals, trend
+    W->>DB: outputs + seal analysis (hash over child hashes)
+    API-->>U: residual per season, degradation trend, caveats

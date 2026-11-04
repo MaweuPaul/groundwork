@@ -5,8 +5,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/google/uuid"
-
 	"groundwork/internal/httpx"
 	"groundwork/internal/middleware"
 	"groundwork/internal/repository"
@@ -15,10 +13,11 @@ import (
 
 type SnapshotHandler struct {
 	service service.SnapshotService
+	refs    service.RefService
 }
 
-func NewSnapshotHandler(service service.SnapshotService) *SnapshotHandler {
-	return &SnapshotHandler{service: service}
+func NewSnapshotHandler(service service.SnapshotService, refs service.RefService) *SnapshotHandler {
+	return &SnapshotHandler{service: service, refs: refs}
 }
 
 type createSnapshotRequest struct {
@@ -26,14 +25,16 @@ type createSnapshotRequest struct {
 	MethodologyVersion string `json:"methodology_version"`
 	DateStart          string `json:"date_start"`
 	DateEnd            string `json:"date_end"`
+	// Optional; omitted means the methodology's default.
+	MaxSceneCloudPct    *float64 `json:"max_scene_cloud_pct"`
+	CloudScoreThreshold *float64 `json:"cloud_score_threshold"`
 }
 
-// Create queues a snapshot of one of the caller's parcels and answers 202 at once;
+// Create queues a snapshot of one of the caller's parcels ({id} is its UUID or short ID) and answers 202 at once;
 // the Python worker computes it. Poll the Location URL for the result.
 func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
-	parcelID, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
 		return
 	}
 
@@ -45,12 +46,14 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	user := middleware.UserFrom(r.Context())
 	id, err := h.service.CreateSnapshot(service.CreateSnapshotInput{
-		ParcelID:           parcelID,
-		OwnerID:            user.ID,
-		Methodology:        req.Methodology,
-		MethodologyVersion: req.MethodologyVersion,
-		DateStart:          req.DateStart,
-		DateEnd:            req.DateEnd,
+		ParcelID:            parcelID,
+		OwnerID:             user.ID,
+		Methodology:         req.Methodology,
+		MethodologyVersion:  req.MethodologyVersion,
+		DateStart:           req.DateStart,
+		DateEnd:             req.DateEnd,
+		MaxSceneCloudPct:    req.MaxSceneCloudPct,
+		CloudScoreThreshold: req.CloudScoreThreshold,
 	})
 
 	var invalid *service.ValidationError
@@ -75,12 +78,12 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusAccepted, map[string]any{"id": id, "status": "pending"})
 }
 
-// Get returns one snapshot with its status, results and hash. Clients poll it after
-// Create until status is completed or failed. 404 covers missing and someone else's.
+// Get returns one snapshot ({id} is its UUID or short ID) with its status, results and
+// hash. Clients poll it after Create until status is completed or failed. 404 covers
+// missing and someone else's.
 func (h *SnapshotHandler) Get(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		httpx.WriteError(w, http.StatusNotFound, "snapshot not found")
+	id, ok := resolveRef(w, r, h.refs.SnapshotID, "snapshot not found")
+	if !ok {
 		return
 	}
 
@@ -97,4 +100,137 @@ func (h *SnapshotHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, snapshot)
+}
+
+// NdviImage serves the snapshot's NDVI map image (a PNG rendered by the worker after the
+// snapshot completed). 404 when there is none yet, or it isn't the caller's.
+func (h *SnapshotHandler) NdviImage(w http.ResponseWriter, r *http.Request) {
+	id, ok := resolveRef(w, r, h.refs.SnapshotID, "snapshot not found")
+	if !ok {
+		return
+	}
+
+	user := middleware.UserFrom(r.Context())
+	png, err := h.service.GetNdviImage(id, user.ID)
+	if err != nil {
+		log.Printf("snapshots: ndvi image: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+	if png == nil {
+		httpx.WriteError(w, http.StatusNotFound, "no NDVI image for this snapshot")
+		return
+	}
+
+	// An image never changes once rendered, but it's private to the owner.
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.Write(png)
+}
+
+type createSeriesRequest struct {
+	createSnapshotRequest
+	WindowMonths   int `json:"window_months"`
+	IntervalMonths int `json:"interval_months"`
+}
+
+// CreateSeries queues one snapshot per window of the range and answers 202 at once.
+// The series is sealed by the database when its last window finishes.
+func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
+	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
+		return
+	}
+
+	var req createSeriesRequest
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	user := middleware.UserFrom(r.Context())
+	ref, err := h.service.CreateSeries(service.CreateSeriesInput{
+		CreateSnapshotInput: service.CreateSnapshotInput{
+			ParcelID:            parcelID,
+			OwnerID:             user.ID,
+			Methodology:         req.Methodology,
+			MethodologyVersion:  req.MethodologyVersion,
+			DateStart:           req.DateStart,
+			DateEnd:             req.DateEnd,
+			MaxSceneCloudPct:    req.MaxSceneCloudPct,
+			CloudScoreThreshold: req.CloudScoreThreshold,
+		},
+		WindowMonths:   req.WindowMonths,
+		IntervalMonths: req.IntervalMonths,
+	})
+
+	var invalid *service.ValidationError
+	switch {
+	case errors.Is(err, repository.ErrParcelNotFound):
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+	case errors.Is(err, service.ErrUnknownMethodology):
+		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+	case errors.As(err, &invalid):
+		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
+	case err != nil:
+		log.Printf("snapshots: create series: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+	default:
+		httpx.WriteJSON(w, http.StatusAccepted, ref)
+	}
+}
+
+// ListSeriesForParcel returns a parcel's series with progress and seals, newest first.
+func (h *SnapshotHandler) ListSeriesForParcel(w http.ResponseWriter, r *http.Request) {
+	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
+		return
+	}
+
+	user := middleware.UserFrom(r.Context())
+	series, err := h.service.ListParcelSeries(parcelID, user.ID)
+	if errors.Is(err, repository.ErrParcelNotFound) {
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+		return
+	}
+	if err != nil {
+		log.Printf("snapshots: list series: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, series)
+}
+
+// ListForParcel returns a parcel's snapshot history, newest first.
+func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) {
+	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
+		return
+	}
+
+	user := middleware.UserFrom(r.Context())
+	snapshots, err := h.service.ListParcelSnapshots(parcelID, user.ID)
+	if errors.Is(err, repository.ErrParcelNotFound) {
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
+		return
+	}
+	if err != nil {
+		log.Printf("snapshots: list for parcel: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, snapshots)
+}
+
+func (h *SnapshotHandler) ListMethodologies(w http.ResponseWriter, r *http.Request) {
+	methodologies, err := h.service.ListMethodologies()
+	if err != nil {
+		log.Printf("methodologies: list: %v", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, methodologies)
 }

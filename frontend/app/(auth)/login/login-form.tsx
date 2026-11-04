@@ -51,7 +51,7 @@ export function LoginForm() {
           defaultChecked={state.values?.remember !== "off"}
           className="size-4 rounded accent-primary-container"
         />
-        <span className="text-caption text-muted">Keep me signed in for 30 days</span>
+        <span className="text-caption text-muted-foreground">Keep me signed in for 30 days</span>
       </label>
 
       <div>
@@ -60,7 +60,7 @@ export function LoginForm() {
         </SubmitButton>
       </div>
 
-      <p className="pt-1 text-center text-label text-muted">
+      <p className="pt-1 text-center text-label text-muted-foreground">
         Don&apos;t have an account?{" "}
         <Link href="/register" className="font-medium text-primary underline underline-offset-2">
           Create Account

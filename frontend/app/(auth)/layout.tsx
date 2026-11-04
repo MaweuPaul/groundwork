@@ -62,7 +62,7 @@ function EvidencePanel() {
 
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 rounded border border-outline-variant/30 bg-surface-lowest/90 px-3 py-1.5 shadow-sm backdrop-blur-sm">
-          <span className="size-2 animate-pulse rounded-full bg-secondary" aria-hidden />
+          <span className="size-2 animate-pulse rounded-full bg-olive" aria-hidden />
           <span className="font-mono text-caption font-medium tracking-wider text-primary">
             SENTINEL-2 L2A BOA REFLECTANCE
           </span>

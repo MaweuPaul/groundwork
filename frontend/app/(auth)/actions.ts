@@ -3,7 +3,13 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { REMEMBER_COOKIE, sessionCookies, type TokenPair } from "@/lib/session";
+import {
+  ACCESS_COOKIE,
+  REFRESH_COOKIE,
+  REMEMBER_COOKIE,
+  sessionCookies,
+  type TokenPair,
+} from "@/lib/session";
 
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 
@@ -107,4 +113,24 @@ export async function register(_prev: AuthFormState, formData: FormData): Promis
 
   await storeTokens(result.data, true);
   redirect("/");
+}
+
+export async function logout() {
+  const cookieStore = await cookies();
+  const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;
+
+  if (refreshToken) {
+    // Best effort: the local session ends even if the API can't be reached.
+    await fetch(`${API_URL}/auth/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      cache: "no-store",
+    }).catch(() => undefined);
+  }
+
+  for (const name of [ACCESS_COOKIE, REFRESH_COOKIE, REMEMBER_COOKIE]) {
+    cookieStore.delete(name);
+  }
+  redirect("/login");
 }

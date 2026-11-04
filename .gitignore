@@ -2,6 +2,9 @@
 .env
 .env.local
 
+# Service account keys (Earth Engine) live here; never commit them
+backend/gee-service/credentials/
+
 # Go workspace
 .cache/
 *.exe

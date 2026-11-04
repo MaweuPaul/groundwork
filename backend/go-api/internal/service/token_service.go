@@ -33,6 +33,7 @@ var ErrInvalidAccessToken = errors.New("invalid access token")
 type TokenService interface {
 	Issue(userID uuid.UUID) (*TokenPair, error)
 	Rotate(rawRefreshToken string) (*TokenPair, error)
+	Revoke(rawRefreshToken string) error
 	ParseAccess(accessToken string) (uuid.UUID, error) // middleware: "who is this?"
 }
 
@@ -92,7 +93,8 @@ func (s *tokenService) Rotate(rawRefreshToken string) (*TokenPair, error) {
 		return nil, ErrInvalidRefreshToken
 	}
 	if stored.RevokedAt != nil {
-		if now.Sub(*stored.RevokedAt) > refreshReuseGrace {
+		rotated := stored.RevokeReason != nil && *stored.RevokeReason == "rotated"
+		if !rotated || now.Sub(*stored.RevokedAt) > refreshReuseGrace {
 			return nil, ErrInvalidRefreshToken
 		}
 		return s.Issue(stored.UserID)
@@ -105,6 +107,16 @@ func (s *tokenService) Rotate(rawRefreshToken string) (*TokenPair, error) {
 	}
 
 	return s.Issue(stored.UserID)
+}
+
+// Revoke ends the session behind a refresh token. Unknown tokens are ignored,
+// so signing out twice, or with a stale cookie, still succeeds.
+func (s *tokenService) Revoke(rawRefreshToken string) error {
+	stored, err := s.repo.GetByHash(hashToken(rawRefreshToken))
+	if err != nil || stored == nil {
+		return err
+	}
+	return s.repo.RevokeForLogout(stored.ID)
 }
 
 // ParseAccess verifies an access token and returns the user ID inside it.

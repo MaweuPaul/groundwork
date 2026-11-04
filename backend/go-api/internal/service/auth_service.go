@@ -21,6 +21,7 @@ var (
 type AuthService interface {
 	Register(email, password, firstName, lastName, username string, role models.UserRole) (*models.User, *TokenPair, error)
 	Refresh(rawRefreshToken string) (*TokenPair, error)
+	Logout(rawRefreshToken string) error
 	Login(email, password string) (*models.User, *TokenPair, error)
 }
 
@@ -73,6 +74,10 @@ func (s *authService) Login(email, password string) (*models.User, *TokenPair, e
 
 func (s *authService) Refresh(rawRefreshToken string) (*TokenPair, error) {
 	return s.tokens.Rotate(rawRefreshToken)
+}
+
+func (s *authService) Logout(rawRefreshToken string) error {
+	return s.tokens.Revoke(rawRefreshToken)
 }
 
 func (s *authService) createUser(email, password, firstName, lastName, username string, role models.UserRole) (*models.User, error) {

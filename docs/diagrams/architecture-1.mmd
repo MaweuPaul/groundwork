@@ -1,0 +1,38 @@
+flowchart LR
+    Browser["Browser<br/>(map, pages)"]
+
+    subgraph Frontend["Next.js frontend :3000"]
+        Pages["Server components<br/>and server actions"]
+        Proxy["proxy.ts<br/>refreshes the session"]
+        ImgRoute["/api/snapshots/[ref]/ndvi<br/>adds the bearer token"]
+    end
+
+    subgraph API["Go API :8081"]
+        Handlers["Handlers → services → repositories"]
+    end
+
+    subgraph DB["PostgreSQL + PostGIS"]
+        Tables[("parcels, snapshots,<br/>measurements, imagery,<br/>series, NDVI images")]
+        Queue[("snapshot_jobs<br/>queue")]
+        Chain["Triggers: hash chain,<br/>series seal, freeze"]
+    end
+
+    subgraph Worker["Python worker"]
+        Loop["Claim → compute → save"]
+        Registry["Methodology registry"]
+    end
+
+    EE["Google Earth Engine<br/>(Sentinel-2, Cloud Score+)"]
+    Tiles["Esri / OSM<br/>map tiles"]
+
+    Browser -- "pages, forms" --> Proxy --> Pages
+    Browser -- "NDVI image" --> ImgRoute
+    Browser -- "basemap tiles" --> Tiles
+    Pages -- "REST + JWT" --> Handlers
+    ImgRoute -- "REST + JWT" --> Handlers
+    Handlers -- "SQL" --> Tables
+    Handlers -- "insert job" --> Queue
+    Queue -- "LISTEN/NOTIFY" --> Loop
+    Loop -- "queue functions,<br/>results (gee_worker role)" --> DB
+    Loop --> Registry -- "compute, render" --> EE
+    Tables --- Chain

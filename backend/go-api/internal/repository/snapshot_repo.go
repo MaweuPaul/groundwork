@@ -20,30 +20,40 @@ type NewSnapshot struct {
 	MethodologyVersion string
 	DateStart          time.Time
 	DateEnd            time.Time
+	// Sealed into the record: scene-level cloud prefilter and Cloud Score+ clear threshold.
+	MaxSceneCloudPct    float64
+	CloudScoreThreshold float64
 }
 
 // SnapshotDetail is one snapshot as the API returns it: status, inputs, results
 // and hash chain fields. The frozen geometry is left out; it's the heavy part and
 // the client already has the parcel's boundary.
 type SnapshotDetail struct {
-	ID                 uuid.UUID          `json:"id"`
-	ParcelID           uuid.UUID          `json:"parcel_id"`
-	Status             string             `json:"status"`
-	FailureMessage     *string            `json:"failure_message,omitempty"`
-	Methodology        string             `json:"methodology"`
-	MethodologyVersion string             `json:"methodology_version"`
-	DateStart          string             `json:"date_start"` // YYYY-MM-DD
-	DateEnd            string             `json:"date_end"`   // YYYY-MM-DD
-	GeometryHash       string             `json:"geometry_hash"`
-	CreatedAt          time.Time          `json:"created_at"`
-	StartedAt          *time.Time         `json:"started_at,omitempty"`
-	CompletedAt        *time.Time         `json:"completed_at,omitempty"`
-	ChainSeq           *int64             `json:"chain_seq,omitempty"`
-	RecordHash         *string            `json:"record_hash,omitempty"`
-	PrevRecordHash     *string            `json:"prev_record_hash,omitempty"`
-	Job                *SnapshotJobInfo   `json:"job,omitempty"`
-	Measurements       map[string]float64 `json:"measurements"` // type slug → value
-	ImagerySources     []ImagerySourceRef `json:"imagery_sources"`
+	ID                  uuid.UUID          `json:"id"`
+	ShortID             string             `json:"short_id"`
+	ParcelID            uuid.UUID          `json:"parcel_id"`
+	ParcelShortID       string             `json:"parcel_short_id"`
+	ParcelName          string             `json:"parcel_name"`
+	Status              string             `json:"status"`
+	FailureMessage      *string            `json:"failure_message,omitempty"`
+	Methodology         string             `json:"methodology"`
+	MethodologyVersion  string             `json:"methodology_version"`
+	DateStart           string             `json:"date_start"` // YYYY-MM-DD
+	DateEnd             string             `json:"date_end"`   // YYYY-MM-DD
+	MaxSceneCloudPct    float64            `json:"max_scene_cloud_pct"`
+	CloudScoreThreshold float64            `json:"cloud_score_threshold"`
+	RecordFormat        int                `json:"record_format"`
+	GeometryHash        string             `json:"geometry_hash"`
+	CreatedAt           time.Time          `json:"created_at"`
+	StartedAt           *time.Time         `json:"started_at,omitempty"`
+	CompletedAt         *time.Time         `json:"completed_at,omitempty"`
+	ChainSeq            *int64             `json:"chain_seq,omitempty"`
+	RecordHash          *string            `json:"record_hash,omitempty"`
+	PrevRecordHash      *string            `json:"prev_record_hash,omitempty"`
+	Job                 *SnapshotJobInfo   `json:"job,omitempty"`
+	Measurements        map[string]float64 `json:"measurements"` // type slug → value
+	ImagerySources      []ImagerySourceRef `json:"imagery_sources"`
+	NdviImage           *NdviImageInfo     `json:"ndvi_image,omitempty"`
 }
 
 // SnapshotJobInfo is the queue progress shown to the client. The worker's raw
@@ -66,6 +76,10 @@ type ImagerySourceRef struct {
 type SnapshotRepository interface {
 	CreateWithJob(in NewSnapshot) (uuid.UUID, error)
 	GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDetail, error)
+	ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SnapshotSummary, error)
+	NdviPNGForOwner(id, ownerID uuid.UUID) ([]byte, error)
+	CreateSeriesWithJobs(in NewSeries) (SeriesRef, error)
+	ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SeriesSummary, error)
 }
 
 type snapshotRepository struct {
@@ -84,69 +98,83 @@ func NewSnapshotRepository(db *gorm.DB) SnapshotRepository {
 // points in a standard order), so the same boundary always hashes the same,
 // however it was drawn.
 func (r *snapshotRepository) CreateWithJob(in NewSnapshot) (uuid.UUID, error) {
-	var row struct{ ID uuid.UUID }
-
+	var id uuid.UUID
 	err := r.db.Transaction(func(tx *gorm.DB) error {
-		res := tx.Raw(`
-			INSERT INTO snapshots (parcel_id, methodology_id, methodology_version,
-			                       date_start, date_end, parcel_geometry, geometry_hash)
-			SELECT p.id, ?, ?, ?::date, ?::date,
-			       p.geometry,
-			       encode(sha256(ST_AsEWKB(ST_Normalize(ST_SnapToGrid(p.geometry, 0.0000001)), 'NDR')), 'hex')
-			FROM parcels p
-			WHERE p.id = ? AND p.owner_id = ?
-			RETURNING id`,
-			in.MethodologyID, in.MethodologyVersion,
-			in.DateStart.Format(time.DateOnly), in.DateEnd.Format(time.DateOnly),
-			in.ParcelID, in.OwnerID,
-		).Scan(&row)
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected == 0 {
-			return ErrParcelNotFound
-		}
-
-		// The insert trigger notifies the worker once this transaction commits.
-		return tx.Exec(`INSERT INTO snapshot_jobs (snapshot_id) VALUES (?)`, row.ID).Error
+		var err error
+		id, err = insertSnapshotWithJob(tx, in, nil)
+		return err
 	})
-	if err != nil {
-		return uuid.Nil, err
+	return id, err
+}
+
+// insertSnapshotWithJob inserts one pending snapshot (optionally in a series) and its job.
+func insertSnapshotWithJob(tx *gorm.DB, in NewSnapshot, seriesID *uuid.UUID) (uuid.UUID, error) {
+	var row struct{ ID uuid.UUID }
+	res := tx.Raw(`
+		INSERT INTO snapshots (parcel_id, methodology_id, methodology_version,
+		                       date_start, date_end, max_scene_cloud_pct, cloud_score_threshold,
+		                       series_id, parcel_geometry, geometry_hash)
+		SELECT p.id, ?, ?, ?::date, ?::date, ?, ?, ?,
+		       p.geometry,
+		       encode(sha256(ST_AsEWKB(ST_Normalize(ST_SnapToGrid(p.geometry, 0.0000001)), 'NDR')), 'hex')
+		FROM parcels p
+		WHERE p.id = ? AND p.owner_id = ?
+		RETURNING id`,
+		in.MethodologyID, in.MethodologyVersion,
+		in.DateStart.Format(time.DateOnly), in.DateEnd.Format(time.DateOnly),
+		in.MaxSceneCloudPct, in.CloudScoreThreshold, seriesID,
+		in.ParcelID, in.OwnerID,
+	).Scan(&row)
+	if res.Error != nil {
+		return uuid.Nil, res.Error
 	}
-	return row.ID, nil
+	if res.RowsAffected == 0 {
+		return uuid.Nil, ErrParcelNotFound
+	}
+
+	// The insert trigger notifies the worker once this transaction commits.
+	return row.ID, tx.Exec(`INSERT INTO snapshot_jobs (snapshot_id) VALUES (?)`, row.ID).Error
 }
 
 // GetByIDForOwner returns nil, nil when the snapshot doesn't exist or its parcel
 // isn't the owner's. Snapshots have no owner column; ownership comes from the parcel.
 func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDetail, error) {
 	var row struct {
-		ID                 uuid.UUID
-		ParcelID           uuid.UUID
-		Status             string
-		FailureMessage     *string
-		Methodology        string
-		MethodologyVersion string
-		DateStart          string
-		DateEnd            string
-		GeometryHash       string
-		CreatedAt          time.Time
-		StartedAt          *time.Time
-		CompletedAt        *time.Time
-		ChainSeq           *int64
-		RecordHash         *string
-		PrevRecordHash     *string
-		JobStatus          *string
-		JobAttempts        *int
-		JobMaxAttempts     *int
-		JobRunAfter        *time.Time
-		JobLastErrorCode   *string
+		ID                  uuid.UUID
+		ShortID             string
+		ParcelID            uuid.UUID
+		ParcelShortID       string
+		ParcelName          string
+		Status              string
+		FailureMessage      *string
+		Methodology         string
+		MethodologyVersion  string
+		DateStart           string
+		DateEnd             string
+		MaxSceneCloudPct    float64
+		CloudScoreThreshold float64
+		RecordFormat        int
+		GeometryHash        string
+		CreatedAt           time.Time
+		StartedAt           *time.Time
+		CompletedAt         *time.Time
+		ChainSeq            *int64
+		RecordHash          *string
+		PrevRecordHash      *string
+		JobStatus           *string
+		JobAttempts         *int
+		JobMaxAttempts      *int
+		JobRunAfter         *time.Time
+		JobLastErrorCode    *string
 	}
 
 	res := r.db.Raw(`
-		SELECT s.id, s.parcel_id, s.status, s.failure_message,
+		SELECT s.id, s.short_id, s.parcel_id, p.short_id AS parcel_short_id,
+		       p.name AS parcel_name, s.status, s.failure_message,
 		       m.slug AS methodology, s.methodology_version,
 		       to_char(s.date_start, 'YYYY-MM-DD') AS date_start,
 		       to_char(s.date_end, 'YYYY-MM-DD') AS date_end,
+		       s.max_scene_cloud_pct, s.cloud_score_threshold, s.record_format,
 		       s.geometry_hash, s.created_at, s.started_at, s.completed_at,
 		       s.chain_seq, s.record_hash, s.prev_record_hash,
 		       j.status AS job_status, j.attempts AS job_attempts,
@@ -167,23 +195,29 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 	}
 
 	detail := &SnapshotDetail{
-		ID:                 row.ID,
-		ParcelID:           row.ParcelID,
-		Status:             row.Status,
-		FailureMessage:     row.FailureMessage,
-		Methodology:        row.Methodology,
-		MethodologyVersion: row.MethodologyVersion,
-		DateStart:          row.DateStart,
-		DateEnd:            row.DateEnd,
-		GeometryHash:       row.GeometryHash,
-		CreatedAt:          row.CreatedAt,
-		StartedAt:          row.StartedAt,
-		CompletedAt:        row.CompletedAt,
-		ChainSeq:           row.ChainSeq,
-		RecordHash:         row.RecordHash,
-		PrevRecordHash:     row.PrevRecordHash,
-		Measurements:       map[string]float64{},
-		ImagerySources:     []ImagerySourceRef{},
+		ID:                  row.ID,
+		ShortID:             row.ShortID,
+		ParcelID:            row.ParcelID,
+		ParcelShortID:       row.ParcelShortID,
+		ParcelName:          row.ParcelName,
+		Status:              row.Status,
+		FailureMessage:      row.FailureMessage,
+		Methodology:         row.Methodology,
+		MethodologyVersion:  row.MethodologyVersion,
+		DateStart:           row.DateStart,
+		DateEnd:             row.DateEnd,
+		MaxSceneCloudPct:    row.MaxSceneCloudPct,
+		CloudScoreThreshold: row.CloudScoreThreshold,
+		RecordFormat:        row.RecordFormat,
+		GeometryHash:        row.GeometryHash,
+		CreatedAt:           row.CreatedAt,
+		StartedAt:           row.StartedAt,
+		CompletedAt:         row.CompletedAt,
+		ChainSeq:            row.ChainSeq,
+		RecordHash:          row.RecordHash,
+		PrevRecordHash:      row.PrevRecordHash,
+		Measurements:        map[string]float64{},
+		ImagerySources:      []ImagerySourceRef{},
 	}
 
 	if row.JobStatus != nil {
@@ -199,22 +233,12 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		}
 	}
 
-	var measurements []struct {
-		Slug  string
-		Value float64
-	}
-	err := r.db.Raw(`
-		SELECT mt.slug, m.value
-		FROM measurements m
-		JOIN measurement_types mt ON mt.id = m.measurement_type_id
-		WHERE m.snapshot_id = ?`,
-		id,
-	).Scan(&measurements).Error
+	measurements, err := measurementsBySnapshot(r.db, []uuid.UUID{id})
 	if err != nil {
 		return nil, err
 	}
-	for _, m := range measurements {
-		detail.Measurements[m.Slug] = m.Value
+	if m := measurements[id]; m != nil {
+		detail.Measurements = m
 	}
 
 	err = r.db.Raw(`
@@ -228,5 +252,87 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		return nil, err
 	}
 
+	images, err := ndviImagesBySnapshot(r.db, []uuid.UUID{id})
+	if err != nil {
+		return nil, err
+	}
+	detail.NdviImage = images[id]
+
 	return detail, nil
+}
+
+// SnapshotSummary is one row of a parcel's snapshot history.
+type SnapshotSummary struct {
+	ID                  uuid.UUID          `json:"id"`
+	ShortID             string             `json:"short_id"`
+	Status              string             `json:"status"`
+	FailureMessage      *string            `json:"failure_message,omitempty"`
+	Methodology         string             `json:"methodology"`
+	MethodologyVersion  string             `json:"methodology_version"`
+	DateStart           string             `json:"date_start"`
+	DateEnd             string             `json:"date_end"`
+	MaxSceneCloudPct    float64            `json:"max_scene_cloud_pct"`
+	CloudScoreThreshold float64            `json:"cloud_score_threshold"`
+	CreatedAt           time.Time          `json:"created_at"`
+	CompletedAt         *time.Time         `json:"completed_at,omitempty"`
+	ChainSeq            *int64             `json:"chain_seq,omitempty"`
+	RecordHash          *string            `json:"record_hash,omitempty"`
+	Measurements        map[string]float64 `json:"measurements"`
+	NdviImage           *NdviImageInfo     `json:"ndvi_image,omitempty"`
+	SeriesShortID       *string            `json:"series_short_id,omitempty"`
+}
+
+// ListByParcelForOwner returns the parcel's snapshots, newest first, or
+// ErrParcelNotFound when the parcel doesn't exist or isn't the owner's.
+func (r *snapshotRepository) ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SnapshotSummary, error) {
+	var owned bool
+	err := r.db.Raw(`SELECT EXISTS (SELECT 1 FROM parcels WHERE id = ? AND owner_id = ?)`, parcelID, ownerID).
+		Scan(&owned).Error
+	if err != nil {
+		return nil, err
+	}
+	if !owned {
+		return nil, ErrParcelNotFound
+	}
+
+	snapshots := []SnapshotSummary{}
+	err = r.db.Raw(`
+		SELECT s.id, s.short_id, s.status, s.failure_message, m.slug AS methodology, s.methodology_version,
+		       to_char(s.date_start, 'YYYY-MM-DD') AS date_start,
+		       to_char(s.date_end, 'YYYY-MM-DD') AS date_end,
+		       s.max_scene_cloud_pct, s.cloud_score_threshold,
+		       s.created_at, s.completed_at, s.chain_seq, s.record_hash,
+		       r.short_id AS series_short_id
+		FROM snapshots s
+		JOIN methodologies m ON m.id = s.methodology_id
+		LEFT JOIN snapshot_series r ON r.id = s.series_id
+		WHERE s.parcel_id = ?
+		ORDER BY s.created_at DESC`,
+		parcelID,
+	).Scan(&snapshots).Error
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uuid.UUID, len(snapshots))
+	for i, s := range snapshots {
+		ids[i] = s.ID
+	}
+	measurements, err := measurementsBySnapshot(r.db, ids)
+	if err != nil {
+		return nil, err
+	}
+	images, err := ndviImagesBySnapshot(r.db, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range snapshots {
+		snapshots[i].Measurements = measurements[snapshots[i].ID]
+		if snapshots[i].Measurements == nil {
+			snapshots[i].Measurements = map[string]float64{}
+		}
+		snapshots[i].NdviImage = images[snapshots[i].ID]
+	}
+
+	return snapshots, nil
 }
