@@ -2,11 +2,11 @@ package middleware
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strings"
 
 	"groundwork/internal/httpx"
+	"groundwork/internal/logging"
 	"groundwork/internal/models"
 	"groundwork/internal/repository"
 	"groundwork/internal/service"
@@ -60,7 +60,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		//  check if the user still exists
 		user, err := m.users.GetByID(userId)
 		if err != nil {
-			log.Printf("auth middleware: load user: %v", err)
+			logging.From(r.Context()).Error("auth middleware: load user", "error", err)
 			httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 			return
 		}
@@ -70,7 +70,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		}
 
 		// all good: attach the user and continue
-		ctx := context.WithValue(r.Context(), userKey{}, user)
+		ctx := context.WithValue(logging.With(r.Context(), "user_id", user.ID), userKey{}, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 
 	})

@@ -2,28 +2,37 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	"groundwork/internal/app"
 	"groundwork/internal/config"
 	"groundwork/internal/database"
+	"groundwork/internal/logging"
 	"groundwork/internal/routes"
 )
 
 func main() {
 	cfg := config.Load()
 
+	if err := logging.Setup(cfg.LogLevel, cfg.LogFormat); err != nil {
+		log.Fatal(err)
+	}
+
 	// Database schema is managed via SQL migrations (go run ./cmd/migrate), not GORM AutoMigrate
 	db, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		slog.Error("connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer database.Close(db)
 
 	router := routes.New(app.New(cfg, db))
 
-	log.Printf("Server starting on port %s", cfg.Port)
+	slog.Info("server starting", "port", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, router); err != nil {
-		log.Fatalf("Server failed: %v", err)
+		slog.Error("server failed", "error", err)
+		os.Exit(1)
 	}
 }

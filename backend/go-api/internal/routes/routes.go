@@ -19,6 +19,7 @@ func New(a *app.App) http.Handler {
 	registerAuth(root, a)
 	root.Handle("/", a.Auth.Authenticate(protected))
 
-	// Recover is outermost so a panic anywhere, even in Logger, becomes a 500.
-	return middleware.Recover(middleware.Logger(root))
+	// Recover wraps Logger so a panic anywhere, even in Logger, becomes a 500. RequestID goes
+	// outside both so the panic line has the ID too.
+	return middleware.RequestID(middleware.Recover(middleware.Logger(root)))
 }

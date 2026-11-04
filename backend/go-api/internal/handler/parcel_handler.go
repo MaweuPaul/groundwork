@@ -2,13 +2,13 @@ package handler
 
 import (
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
 	"gorm.io/datatypes"
 
 	"groundwork/internal/httpx"
+	"groundwork/internal/logging"
 	"groundwork/internal/middleware"
 	"groundwork/internal/models"
 	"groundwork/internal/repository"
@@ -63,7 +63,7 @@ func (h *ParcelHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("parcels: create: %v", err)
+		logging.From(r.Context()).Error("parcels: create", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -75,7 +75,7 @@ func (h *ParcelHandler) List(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFrom(r.Context())
 	parcels, err := h.service.ListParcels(user.ID)
 	if err != nil {
-		log.Printf("parcels: list: %v", err)
+		logging.From(r.Context()).Error("parcels: list", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -94,7 +94,7 @@ func (h *ParcelHandler) Get(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFrom(r.Context())
 	parcel, err := h.service.GetParcelByIDForOwner(id, user.ID)
 	if err != nil {
-		log.Printf("parcels: get: %v", err)
+		logging.From(r.Context()).Error("parcels: get", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}

@@ -2,7 +2,7 @@ package database
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -10,15 +10,21 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// gormWriter sends GORM's output to slog. GORM is set to log only warnings and errors.
+type gormWriter struct{}
+
+func (gormWriter) Printf(format string, args ...any) {
+	slog.Warn("gorm", "detail", fmt.Sprintf(format, args...))
+}
+
 // Connect initializes the GORM DB connection
 func Connect(dsn string) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.New(log.Default(), logger.Config{
+		Logger: logger.New(gormWriter{}, logger.Config{
 			SlowThreshold:             200 * time.Millisecond,
 			LogLevel:                  logger.Warn,
 			IgnoreRecordNotFoundError: true, // "no such user" is a normal answer, not an error
 			ParameterizedQueries:      true, // log "WHERE email = $1", never the email itself
-			Colorful:                  true,
 		}),
 	})
 	if err != nil {
@@ -32,10 +38,10 @@ func Connect(dsn string) (*gorm.DB, error) {
 func Close(db *gorm.DB) {
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Printf("Failed to get sql.DB: %v", err)
+		slog.Error("get sql.DB", "error", err)
 		return
 	}
 	if err := sqlDB.Close(); err != nil {
-		log.Printf("Failed to close sql.DB: %v", err)
+		slog.Error("close sql.DB", "error", err)
 	}
 }

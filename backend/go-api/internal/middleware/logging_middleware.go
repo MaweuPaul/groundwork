@@ -1,12 +1,15 @@
 package middleware
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"runtime/debug"
 	"time"
 
+	"github.com/google/uuid"
+
 	"groundwork/internal/httpx"
+	"groundwork/internal/logging"
 )
 
 // statusRecorder remembers the status code a handler wrote, for the log line.
@@ -20,7 +23,17 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
-// Logger prints one line per request: method, path, status and duration.
+// RequestID tags the request's logger with a new ID and returns it in X-Request-ID, so a
+// failure someone reports can be found in the logs. An ID sent by the client is ignored.
+func RequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := uuid.NewString()
+		w.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(w, r.WithContext(logging.With(r.Context(), "request_id", id)))
+	})
+}
+
+// Logger writes one line per request. The path is logged without its query string.
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -28,7 +41,13 @@ func Logger(next http.Handler) http.Handler {
 
 		next.ServeHTTP(rec, r)
 
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
+		level := slog.LevelInfo
+		if rec.status >= http.StatusInternalServerError {
+			level = slog.LevelError
+		}
+		logging.From(r.Context()).Log(r.Context(), level, "request",
+			"method", r.Method, "path", r.URL.Path, "status", rec.status,
+			"duration_ms", time.Since(start).Milliseconds())
 	})
 }
 
@@ -37,7 +56,8 @@ func Recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("panic: %s %s: %v\n%s", r.Method, r.URL.Path, err, debug.Stack())
+				logging.From(r.Context()).Error("panic",
+					"method", r.Method, "path", r.URL.Path, "error", err, "stack", string(debug.Stack()))
 				httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 			}
 		}()

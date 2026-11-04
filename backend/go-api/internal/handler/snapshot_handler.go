@@ -2,10 +2,10 @@ package handler
 
 import (
 	"errors"
-	"log"
 	"net/http"
 
 	"groundwork/internal/httpx"
+	"groundwork/internal/logging"
 	"groundwork/internal/middleware"
 	"groundwork/internal/repository"
 	"groundwork/internal/service"
@@ -68,7 +68,7 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
 		return
 	case err != nil:
-		log.Printf("snapshots: create: %v", err)
+		logging.From(r.Context()).Error("snapshots: create", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -90,7 +90,7 @@ func (h *SnapshotHandler) Get(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFrom(r.Context())
 	snapshot, err := h.service.GetSnapshot(id, user.ID)
 	if err != nil {
-		log.Printf("snapshots: get: %v", err)
+		logging.From(r.Context()).Error("snapshots: get", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -113,7 +113,7 @@ func (h *SnapshotHandler) NdviImage(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFrom(r.Context())
 	png, err := h.service.GetNdviImage(id, user.ID)
 	if err != nil {
-		log.Printf("snapshots: ndvi image: %v", err)
+		logging.From(r.Context()).Error("snapshots: ndvi image", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -173,7 +173,7 @@ func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
 	case errors.As(err, &invalid):
 		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
 	case err != nil:
-		log.Printf("snapshots: create series: %v", err)
+		logging.From(r.Context()).Error("snapshots: create series", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 	default:
 		httpx.WriteJSON(w, http.StatusAccepted, ref)
@@ -194,7 +194,7 @@ func (h *SnapshotHandler) ListSeriesForParcel(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err != nil {
-		log.Printf("snapshots: list series: %v", err)
+		logging.From(r.Context()).Error("snapshots: list series", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -216,7 +216,7 @@ func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err != nil {
-		log.Printf("snapshots: list for parcel: %v", err)
+		logging.From(r.Context()).Error("snapshots: list for parcel", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -227,7 +227,7 @@ func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) 
 func (h *SnapshotHandler) ListMethodologies(w http.ResponseWriter, r *http.Request) {
 	methodologies, err := h.service.ListMethodologies()
 	if err != nil {
-		log.Printf("methodologies: list: %v", err)
+		logging.From(r.Context()).Error("methodologies: list", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
