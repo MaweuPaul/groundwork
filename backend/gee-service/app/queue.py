@@ -11,7 +11,7 @@ import psycopg
 from psycopg.rows import class_row
 from psycopg.types.json import Jsonb
 
-from app.compute import PROVIDER, S2_COLLECTION, Result
+from app.contract import Result
 from app.errors import JobError
 from app.models import Job, Methodology
 
@@ -78,17 +78,18 @@ def save_and_complete(conn: psycopg.Connection, job: Job, worker: str, result: R
                 INSERT INTO imagery_sources (snapshot_id, provider, satellite, scene_id,
                                              acquisition_time, cloud_cover_pct,
                                              processing_level, asset_uri, metadata)
-                VALUES (%s, %s, %s, %s, %s, %s, 'L2A', %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 [
                     (
                         job.snapshot_id,
-                        PROVIDER,
+                        s.provider,
                         s.satellite,
                         s.scene_id,
                         s.acquisition_time,
                         s.cloud_cover_pct,
-                        f"{S2_COLLECTION}/{s.scene_id}",
+                        s.processing_level,
+                        s.asset_uri,
                         Jsonb({"product_id": s.product_id} if s.product_id else {}),
                     )
                     for s in result.scenes

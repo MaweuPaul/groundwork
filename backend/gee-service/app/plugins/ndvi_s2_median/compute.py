@@ -7,12 +7,12 @@ are the measurements. Both cloud settings come from the snapshot and are sealed 
 """
 
 import json
-from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import ee
 
+from app.contract import Measurement, Result, Scene
 from app.errors import JobError
 from app.models import Job, Methodology
 
@@ -20,29 +20,9 @@ S2_COLLECTION = "COPERNICUS/S2_SR_HARMONIZED"
 CLOUD_SCORE_COLLECTION = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"
 SCALE_M = 10
 PROVIDER = "Copernicus Sentinel-2 via Google Earth Engine"
+PROCESSING_LEVEL = "L2A"
 
 SCENE_PROPERTIES = ["system:index", "system:time_start", "CLOUDY_PIXEL_PERCENTAGE", "SPACECRAFT_NAME", "PRODUCT_ID"]
-
-
-@dataclass(frozen=True)
-class Measurement:
-    value: float
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class Scene:
-    scene_id: str
-    satellite: str
-    acquisition_time: datetime
-    cloud_cover_pct: float | None
-    product_id: str | None
-
-
-@dataclass(frozen=True)
-class Result:
-    measurements: dict[str, Measurement]
-    scenes: list[Scene]
 
 
 def check_supported(m: Methodology) -> None:
@@ -170,6 +150,9 @@ def summarize(info: dict[str, Any], job: Job) -> Result:
             acquisition_time=datetime.fromtimestamp(time_start / 1000, tz=timezone.utc),
             cloud_cover_pct=cloud,
             product_id=product_id,
+            provider=PROVIDER,
+            processing_level=PROCESSING_LEVEL,
+            asset_uri=f"{S2_COLLECTION}/{scene_id}",
         )
         for scene_id, time_start, cloud, spacecraft, product_id in rows
     ]

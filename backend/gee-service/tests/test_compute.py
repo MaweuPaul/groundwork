@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.compute import check_supported, end_exclusive, summarize
+from app.plugins.ndvi_s2_median.compute import check_supported, end_exclusive, summarize
 from app.errors import JobError
 from app.models import Job, Methodology
 
@@ -54,6 +54,9 @@ def test_summarize_builds_measurements_and_scenes():
     assert result.measurements["valid_pixel_pct"].metadata["cloud_score_plus_threshold"] == 0.6
 
     (scene,) = result.scenes
+    assert scene.provider == "Copernicus Sentinel-2 via Google Earth Engine"
+    assert scene.processing_level == "L2A"
+    assert scene.asset_uri == f"COPERNICUS/S2_SR_HARMONIZED/{scene.scene_id}"
     assert scene.scene_id == SCENE[0]
     assert scene.satellite == "sentinel-2b"
     assert scene.acquisition_time == datetime(2025, 4, 12, 7, 36, 19, tzinfo=timezone.utc)

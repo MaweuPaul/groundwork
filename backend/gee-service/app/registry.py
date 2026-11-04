@@ -1,31 +1,21 @@
 """Methodology plugins: the one place the worker learns what it can compute.
 
-To add a methodology: write a module with a compute(job, methodology) -> Result function
-(and optionally render(req) -> Rendered for a map image), register it here under its
-slug, and seed the methodology and its measurement types in a migration. Nothing else in
-the worker changes. See docs/architecture.md.
+To add a methodology: create a folder in app/plugins exporting PLUGIN (see app/contract.py),
+register it here under its slug, and seed the methodology and its measurement types in a
+migration. Nothing else in the worker changes. See docs/architecture.md.
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass
-
-from app import compute, render
-from app.compute import Result
+from app.contract import Plugin
 from app.errors import JobError
-from app.models import Job, Methodology
-from app.render import ImageRequest, Rendered
-
-
-@dataclass(frozen=True)
-class Plugin:
-    compute: Callable[[Job, Methodology], Result]
-    # None when the methodology has no map image.
-    render: Callable[[ImageRequest], Rendered] | None = None
-
+from app.plugins import ndvi_s2_median
 
 PLUGINS: dict[str, Plugin] = {
-    "ndvi-s2-median": Plugin(compute=compute.run, render=render.render),
+    "ndvi-s2-median": ndvi_s2_median.PLUGIN,
 }
+
+
+def renderable_slugs() -> list[str]:
+    return [slug for slug, plugin in PLUGINS.items() if plugin.render is not None]
 
 
 def plugin_for(slug: str) -> Plugin:

@@ -2,7 +2,7 @@
 
 Waits for snapshot jobs (LISTEN snapshot_jobs, with a fallback poll), computes each with
 Earth Engine, and saves the result or records the failure. When no job is due, it renders
-the NDVI map image of any completed snapshot that lacks one. Run several for more
+the map image of any completed snapshot that lacks one. Run several for more
 throughput; SKIP LOCKED in claim_snapshot_job keeps them off each other's jobs.
 """
 
@@ -39,10 +39,9 @@ def process(conn: psycopg.Connection, settings: Settings, job: Job) -> None:
         record_failure(conn, settings, job, classify(exc))
         return
 
-    m = result.measurements
     log.info(
-        "job %s: completed, NDVI mean %.3f, %.0f%% clear, %d scenes, record %s",
-        job.job_id, m["ndvi_mean"].value, m["valid_pixel_pct"].value, len(result.scenes), record_hash,
+        "job %s: completed, %d measurements, %d scenes, record %s",
+        job.job_id, len(result.measurements), len(result.scenes), record_hash,
     )
 
 
@@ -64,23 +63,19 @@ def drain(conn: psycopg.Connection, settings: Settings) -> None:
 
 
 def render_next_image(conn: psycopg.Connection) -> bool:
-    """Renders one missing NDVI image. Returns False when there was none to render."""
-    req = images.next_missing(conn)
+    """Renders one missing map image. Returns False when there was none to render."""
+    req = images.next_missing(conn, registry.renderable_slugs())
     if req is None:
         return False
     try:
-        plugin = registry.plugin_for(req.methodology_slug)
-        if plugin.render is None:
-            images.save_error(conn, req, "This methodology has no map image.")
-            return True
-        image = plugin.render(req)
+        image = registry.plugin_for(req.methodology_slug).render(req)
     except Exception as exc:
         error = classify(exc)
-        log.warning("snapshot %s: NDVI image failed: %s", req.snapshot_id, error)
+        log.warning("snapshot %s: map image failed: %s", req.snapshot_id, error)
         images.save_error(conn, req, str(error))
         return True
     images.save(conn, req, image)
-    log.info("snapshot %s: NDVI image %dx%d, %d KB", req.snapshot_id, image.width, image.height, len(image.png) // 1024)
+    log.info("snapshot %s: map image %dx%d, %d KB", req.snapshot_id, image.width, image.height, len(image.png) // 1024)
     return True
 
 
