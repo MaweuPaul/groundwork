@@ -15,9 +15,7 @@ def next_missing(conn: psycopg.Connection, slugs: list[str]) -> ImageRequest | N
             """
             SELECT s.id AS snapshot_id, m.slug AS methodology_slug,
                    ST_AsGeoJSON(s.parcel_geometry) AS geometry_geojson,
-                   s.date_start, s.date_end,
-                   s.max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
-                   s.cloud_score_threshold::float8 AS cloud_score_threshold
+                   s.date_start, s.date_end, s.parameters
             FROM snapshots s
             JOIN methodologies m ON m.id = s.methodology_id
             WHERE s.status = 'completed'

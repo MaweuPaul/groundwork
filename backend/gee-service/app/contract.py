@@ -43,12 +43,16 @@ class Scene:
     provider: str
     processing_level: str
     asset_uri: str
+    # The provider's version of the source when it was read, e.g. Earth Engine's system:version.
+    source_version: str | None = None
 
 
 @dataclass(frozen=True)
 class Result:
     measurements: dict[str, Measurement]
     scenes: list[Scene]
+    # Quality flags, e.g. {"low_coverage": "42% clear, below 50%"}. Sealed; never change a value.
+    flags: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -58,8 +62,7 @@ class ImageRequest:
     geometry_geojson: str
     date_start: date
     date_end: date
-    max_scene_cloud_pct: float
-    cloud_score_threshold: float
+    parameters: dict[str, Any]
 
 
 @dataclass(frozen=True)

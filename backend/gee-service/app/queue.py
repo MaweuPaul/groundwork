@@ -21,10 +21,7 @@ def claim(conn: psycopg.Connection, worker: str, lock_minutes: int) -> Job | Non
         cur.execute(
             """
             SELECT job_id, snapshot_id, attempt, methodology_id, methodology_version,
-                   date_start, date_end,
-                   max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
-                   cloud_score_threshold::float8 AS cloud_score_threshold,
-                   geometry_geojson
+                   date_start, date_end, parameters, geometry_geojson
             FROM claim_snapshot_job(%s, make_interval(mins => %s))
             """,
             (worker, lock_minutes),
@@ -77,8 +74,8 @@ def save_and_complete(conn: psycopg.Connection, job: Job, worker: str, result: R
                 """
                 INSERT INTO imagery_sources (snapshot_id, provider, satellite, scene_id,
                                              acquisition_time, cloud_cover_pct,
-                                             processing_level, asset_uri, metadata)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                             processing_level, asset_uri, source_version, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 [
                     (
@@ -90,10 +87,15 @@ def save_and_complete(conn: psycopg.Connection, job: Job, worker: str, result: R
                         s.cloud_cover_pct,
                         s.processing_level,
                         s.asset_uri,
+                        s.source_version,
                         Jsonb({"product_id": s.product_id} if s.product_id else {}),
                     )
                     for s in result.scenes
                 ],
+            )
+            cur.executemany(
+                "INSERT INTO snapshot_flags (snapshot_id, flag, detail) VALUES (%s, %s, %s)",
+                [(job.snapshot_id, flag, detail) for flag, detail in result.flags.items()],
             )
 
         # Raises if another worker took the job over; the transaction then rolls back.

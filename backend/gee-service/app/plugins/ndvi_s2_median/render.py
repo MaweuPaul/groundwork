@@ -15,7 +15,7 @@ import struct
 import ee
 
 from app.contract import Bounds, ImageRequest, Rendered
-from app.plugins.ndvi_s2_median.compute import SCALE_M, build_composite
+from app.plugins.ndvi_s2_median.compute import SCALE_M, build_composite, setting
 
 # Sequential, light to dark: bare ground pale, dense vegetation dark. Lightness alone carries
 # the order, so it reads without colour vision and in greyscale.
@@ -86,7 +86,11 @@ def png_size(png: bytes) -> tuple[int, int]:
 def render(req: ImageRequest) -> Rendered:
     geometry = ee.Geometry(json.loads(req.geometry_geojson))
     _, composite = build_composite(
-        geometry, req.date_start, req.date_end, req.max_scene_cloud_pct, req.cloud_score_threshold
+        geometry,
+        req.date_start,
+        req.date_end,
+        setting(req.parameters, "max_scene_cloud_pct"),
+        setting(req.parameters, "cloud_score_threshold"),
     )
 
     b = bounds_of(req.geometry_geojson)

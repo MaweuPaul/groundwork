@@ -18,8 +18,7 @@ def job() -> Job:
         methodology_version="1.0.0",
         date_start=date(2026, 1, 1),
         date_end=date(2026, 3, 31),
-        max_scene_cloud_pct=60,
-        cloud_score_threshold=0.6,
+        parameters={"max_scene_cloud_pct": 60, "cloud_score_threshold": 0.6},
         geometry_geojson="{}",
     )
 
