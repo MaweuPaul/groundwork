@@ -12,7 +12,7 @@ import time
 
 import psycopg
 
-from app import earth_engine, images, queue, registry
+from app import earth_engine, images, manifests, queue, registry
 from app.config import ConfigError, Settings, load_settings
 from app.errors import JobError, classify
 from app.models import Job
@@ -113,6 +113,18 @@ def main() -> int:
         log.error("could not sign in to Earth Engine (project %s): %s", settings.gee_project, exc)
         return 2
     log.info("signed in to Earth Engine, project %s", settings.gee_project)
+
+    try:
+        with psycopg.connect(settings.database_url) as conn:
+            problems = manifests.check(conn, registry.PLUGINS)
+    except psycopg.Error as exc:
+        log.error("could not check plugin manifests: %s", exc)
+        return 2
+    if problems:
+        for problem in problems:
+            log.error("%s", problem)
+        return 2
+    log.info("plugins: %s", ", ".join(sorted(registry.PLUGINS)))
 
     try:
         serve(settings)
