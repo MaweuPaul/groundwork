@@ -1,17 +1,30 @@
 """Methodology plugins: the one place the worker learns what it can compute.
 
 To add a methodology: create a folder in app/plugins exporting PLUGIN (see app/contract.py),
-register it here under its slug, and seed the methodology and its measurement types in a
-migration. Nothing else in the worker changes. See docs/architecture.md.
+and seed the methodology and its measurement types in a migration. It is found automatically,
+so nothing else in the worker changes. See docs/architecture.md.
 """
 
+import importlib
+import pkgutil
+
+from app import plugins
 from app.contract import Plugin
 from app.errors import JobError
-from app.plugins import ndvi_s2_median
 
-PLUGINS: dict[str, Plugin] = {
-    "ndvi-s2-median": ndvi_s2_median.PLUGIN,
-}
+
+def discover()-> dict[str,Plugin]:
+    found: dict[str,Plugin] = {}
+    for module in pkgutil.iter_modules(plugins.__path__):
+        plugin =importlib.import_module(f"app.plugins.{module.name}").PLUGIN
+        slug = plugin.manifest.slug
+        if slug in found:
+            raise RuntimeError(f"Two plugins use the slug {slug}.")
+        found[slug] = plugin
+    return found
+
+
+PLUGINS = discover()
 
 
 def renderable_slugs() -> list[str]:

@@ -10,6 +10,24 @@ from app.models import Job, Methodology
 
 
 @dataclass(frozen=True)
+class Parameter:
+    name:str
+    label:str
+    type:str
+    min:float
+    max:float
+    default:float
+
+@dataclass(frozen=True)
+class Manifest:
+    slug: str
+    version: str
+    parameters: list[Parameter]
+    measurements: list[str]
+    
+
+
+@dataclass(frozen=True)
 class Measurement:
     value: float
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -63,6 +81,7 @@ class Rendered:
 
 @dataclass(frozen=True)
 class Plugin:
+    manifest: Manifest
     compute: Callable[[Job, Methodology], Result]
     # None when the methodology has no map image.
     render: Callable[[ImageRequest], Rendered] | None = None
