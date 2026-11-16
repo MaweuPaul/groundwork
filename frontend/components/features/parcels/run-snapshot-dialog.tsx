@@ -6,6 +6,7 @@ import { useActionState, useState } from 'react';
 import { runSnapshotAction, type SnapshotFormState } from '@/app/(app)/parcels/[slug]/actions';
 import DatePicker from '@/components/shared/date-picker';
 import InfoTip from '@/components/shared/info-tip';
+import { ACTIVITY_CHANGED } from '@/components/shared/snapshot-notifier';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -244,7 +245,10 @@ const RunSnapshotDialog = ({
   const [state, formAction, pending] = useActionState(
     async (prev: SnapshotFormState, formData: FormData) => {
       const result = await runSnapshotAction(prev, formData);
-      if (result.ok) setOpen(false);
+      if (result.ok) {
+        setOpen(false);
+        window.dispatchEvent(new Event(ACTIVITY_CHANGED));
+      }
       return result;
     },
     {},
