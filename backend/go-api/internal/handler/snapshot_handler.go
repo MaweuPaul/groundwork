@@ -25,9 +25,28 @@ type createSnapshotRequest struct {
 	MethodologyVersion string `json:"methodology_version"`
 	DateStart          string `json:"date_start"`
 	DateEnd            string `json:"date_end"`
-	// Optional; omitted means the methodology's default.
+	// Optional; a parameter left out gets the methodology's default.
+	Parameters map[string]float64 `json:"parameters"`
+	// Deprecated: send them in parameters. Used when parameters doesn't set them.
 	MaxSceneCloudPct    *float64 `json:"max_scene_cloud_pct"`
 	CloudScoreThreshold *float64 `json:"cloud_score_threshold"`
+}
+
+func (req createSnapshotRequest) parameters() map[string]float64 {
+	params := make(map[string]float64, len(req.Parameters)+2)
+	for name, value := range req.Parameters {
+		params[name] = value
+	}
+	legacy := map[string]*float64{
+		"max_scene_cloud_pct":   req.MaxSceneCloudPct,
+		"cloud_score_threshold": req.CloudScoreThreshold,
+	}
+	for name, value := range legacy {
+		if _, set := params[name]; !set && value != nil {
+			params[name] = *value
+		}
+	}
+	return params
 }
 
 // Create queues a snapshot of one of the caller's parcels ({id} is its UUID or short ID) and answers 202 at once;
@@ -46,14 +65,13 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	user := middleware.UserFrom(r.Context())
 	id, err := h.service.CreateSnapshot(service.CreateSnapshotInput{
-		ParcelID:            parcelID,
-		OwnerID:             user.ID,
-		Methodology:         req.Methodology,
-		MethodologyVersion:  req.MethodologyVersion,
-		DateStart:           req.DateStart,
-		DateEnd:             req.DateEnd,
-		MaxSceneCloudPct:    req.MaxSceneCloudPct,
-		CloudScoreThreshold: req.CloudScoreThreshold,
+		ParcelID:           parcelID,
+		OwnerID:            user.ID,
+		Methodology:        req.Methodology,
+		MethodologyVersion: req.MethodologyVersion,
+		DateStart:          req.DateStart,
+		DateEnd:            req.DateEnd,
+		Parameters:         req.parameters(),
 	})
 
 	var invalid *service.ValidationError
@@ -151,14 +169,13 @@ func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFrom(r.Context())
 	ref, err := h.service.CreateSeries(service.CreateSeriesInput{
 		CreateSnapshotInput: service.CreateSnapshotInput{
-			ParcelID:            parcelID,
-			OwnerID:             user.ID,
-			Methodology:         req.Methodology,
-			MethodologyVersion:  req.MethodologyVersion,
-			DateStart:           req.DateStart,
-			DateEnd:             req.DateEnd,
-			MaxSceneCloudPct:    req.MaxSceneCloudPct,
-			CloudScoreThreshold: req.CloudScoreThreshold,
+			ParcelID:           parcelID,
+			OwnerID:            user.ID,
+			Methodology:        req.Methodology,
+			MethodologyVersion: req.MethodologyVersion,
+			DateStart:          req.DateStart,
+			DateEnd:            req.DateEnd,
+			Parameters:         req.parameters(),
 		},
 		WindowMonths:   req.WindowMonths,
 		IntervalMonths: req.IntervalMonths,

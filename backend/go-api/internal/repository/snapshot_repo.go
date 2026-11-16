@@ -20,28 +20,30 @@ type NewSnapshot struct {
 	MethodologyVersion string
 	DateStart          time.Time
 	DateEnd            time.Time
-	// Sealed into the record: scene-level cloud prefilter and Cloud Score+ clear threshold.
-	MaxSceneCloudPct    float64
-	CloudScoreThreshold float64
+	// Every parameter of the methodology, defaults filled in; sealed into the record.
+	Parameters Parameters
 }
 
 // SnapshotDetail is one snapshot as the API returns it: status, inputs, results
 // and hash chain fields. The frozen geometry is left out; it's the heavy part and
 // the client already has the parcel's boundary.
 type SnapshotDetail struct {
-	ID                  uuid.UUID          `json:"id"`
-	ShortID             string             `json:"short_id"`
-	ParcelID            uuid.UUID          `json:"parcel_id"`
-	ParcelShortID       string             `json:"parcel_short_id"`
-	ParcelName          string             `json:"parcel_name"`
-	Status              string             `json:"status"`
-	FailureMessage      *string            `json:"failure_message,omitempty"`
-	Methodology         string             `json:"methodology"`
-	MethodologyVersion  string             `json:"methodology_version"`
-	DateStart           string             `json:"date_start"` // YYYY-MM-DD
-	DateEnd             string             `json:"date_end"`   // YYYY-MM-DD
-	MaxSceneCloudPct    float64            `json:"max_scene_cloud_pct"`
-	CloudScoreThreshold float64            `json:"cloud_score_threshold"`
+	ID                 uuid.UUID      `json:"id"`
+	ShortID            string         `json:"short_id"`
+	ParcelID           uuid.UUID      `json:"parcel_id"`
+	ParcelShortID      string         `json:"parcel_short_id"`
+	ParcelName         string         `json:"parcel_name"`
+	Status             string         `json:"status"`
+	FailureMessage     *string        `json:"failure_message,omitempty"`
+	Methodology        string         `json:"methodology"`
+	MethodologyVersion string         `json:"methodology_version"`
+	DateStart          string         `json:"date_start"` // YYYY-MM-DD
+	DateEnd            string         `json:"date_end"`   // YYYY-MM-DD
+	Parameters         Parameters     `json:"parameters"`
+	Flags              []SnapshotFlag `json:"flags"`
+	// Deprecated: read parameters. Null for methodologies without these settings.
+	MaxSceneCloudPct    *float64           `json:"max_scene_cloud_pct"`
+	CloudScoreThreshold *float64           `json:"cloud_score_threshold"`
 	RecordFormat        int                `json:"record_format"`
 	GeometryHash        string             `json:"geometry_hash"`
 	CreatedAt           time.Time          `json:"created_at"`
@@ -112,9 +114,9 @@ func insertSnapshotWithJob(tx *gorm.DB, in NewSnapshot, seriesID *uuid.UUID) (uu
 	var row struct{ ID uuid.UUID }
 	res := tx.Raw(`
 		INSERT INTO snapshots (parcel_id, methodology_id, methodology_version,
-		                       date_start, date_end, max_scene_cloud_pct, cloud_score_threshold,
+		                       date_start, date_end, parameters,
 		                       series_id, parcel_geometry, geometry_hash)
-		SELECT p.id, ?, ?, ?::date, ?::date, ?, ?, ?,
+		SELECT p.id, ?, ?, ?::date, ?::date, ?::jsonb, ?,
 		       p.geometry,
 		       encode(sha256(ST_AsEWKB(ST_Normalize(ST_SnapToGrid(p.geometry, 0.0000001)), 'NDR')), 'hex')
 		FROM parcels p
@@ -122,7 +124,7 @@ func insertSnapshotWithJob(tx *gorm.DB, in NewSnapshot, seriesID *uuid.UUID) (uu
 		RETURNING id`,
 		in.MethodologyID, in.MethodologyVersion,
 		in.DateStart.Format(time.DateOnly), in.DateEnd.Format(time.DateOnly),
-		in.MaxSceneCloudPct, in.CloudScoreThreshold, seriesID,
+		in.Parameters, seriesID,
 		in.ParcelID, in.OwnerID,
 	).Scan(&row)
 	if res.Error != nil {
@@ -151,8 +153,9 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		MethodologyVersion  string
 		DateStart           string
 		DateEnd             string
-		MaxSceneCloudPct    float64
-		CloudScoreThreshold float64
+		Parameters          Parameters
+		MaxSceneCloudPct    *float64
+		CloudScoreThreshold *float64
 		RecordFormat        int
 		GeometryHash        string
 		CreatedAt           time.Time
@@ -174,7 +177,8 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		       m.slug AS methodology, s.methodology_version,
 		       to_char(s.date_start, 'YYYY-MM-DD') AS date_start,
 		       to_char(s.date_end, 'YYYY-MM-DD') AS date_end,
-		       s.max_scene_cloud_pct, s.cloud_score_threshold, s.record_format,
+		       s.parameters, s.max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
+		       s.cloud_score_threshold::float8 AS cloud_score_threshold, s.record_format,
 		       s.geometry_hash, s.created_at, s.started_at, s.completed_at,
 		       s.chain_seq, s.record_hash, s.prev_record_hash,
 		       j.status AS job_status, j.attempts AS job_attempts,
@@ -206,6 +210,7 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		MethodologyVersion:  row.MethodologyVersion,
 		DateStart:           row.DateStart,
 		DateEnd:             row.DateEnd,
+		Parameters:          row.Parameters,
 		MaxSceneCloudPct:    row.MaxSceneCloudPct,
 		CloudScoreThreshold: row.CloudScoreThreshold,
 		RecordFormat:        row.RecordFormat,
@@ -241,6 +246,12 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		detail.Measurements = m
 	}
 
+	flags, err := flagsBySnapshot(r.db, []uuid.UUID{id})
+	if err != nil {
+		return nil, err
+	}
+	detail.Flags = flagsOrEmpty(flags[id])
+
 	err = r.db.Raw(`
 		SELECT scene_id, satellite, acquisition_time, cloud_cover_pct
 		FROM imagery_sources
@@ -263,16 +274,19 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 
 // SnapshotSummary is one row of a parcel's snapshot history.
 type SnapshotSummary struct {
-	ID                  uuid.UUID          `json:"id"`
-	ShortID             string             `json:"short_id"`
-	Status              string             `json:"status"`
-	FailureMessage      *string            `json:"failure_message,omitempty"`
-	Methodology         string             `json:"methodology"`
-	MethodologyVersion  string             `json:"methodology_version"`
-	DateStart           string             `json:"date_start"`
-	DateEnd             string             `json:"date_end"`
-	MaxSceneCloudPct    float64            `json:"max_scene_cloud_pct"`
-	CloudScoreThreshold float64            `json:"cloud_score_threshold"`
+	ID                 uuid.UUID      `json:"id"`
+	ShortID            string         `json:"short_id"`
+	Status             string         `json:"status"`
+	FailureMessage     *string        `json:"failure_message,omitempty"`
+	Methodology        string         `json:"methodology"`
+	MethodologyVersion string         `json:"methodology_version"`
+	DateStart          string         `json:"date_start"`
+	DateEnd            string         `json:"date_end"`
+	Parameters         Parameters     `json:"parameters"`
+	Flags              []SnapshotFlag `json:"flags" gorm:"-"`
+	// Deprecated: read parameters. Null for methodologies without these settings.
+	MaxSceneCloudPct    *float64           `json:"max_scene_cloud_pct"`
+	CloudScoreThreshold *float64           `json:"cloud_score_threshold"`
 	CreatedAt           time.Time          `json:"created_at"`
 	CompletedAt         *time.Time         `json:"completed_at,omitempty"`
 	ChainSeq            *int64             `json:"chain_seq,omitempty"`
@@ -300,7 +314,8 @@ func (r *snapshotRepository) ListByParcelForOwner(parcelID, ownerID uuid.UUID) (
 		SELECT s.id, s.short_id, s.status, s.failure_message, m.slug AS methodology, s.methodology_version,
 		       to_char(s.date_start, 'YYYY-MM-DD') AS date_start,
 		       to_char(s.date_end, 'YYYY-MM-DD') AS date_end,
-		       s.max_scene_cloud_pct, s.cloud_score_threshold,
+		       s.parameters, s.max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
+		       s.cloud_score_threshold::float8 AS cloud_score_threshold,
 		       s.created_at, s.completed_at, s.chain_seq, s.record_hash,
 		       r.short_id AS series_short_id
 		FROM snapshots s
@@ -326,7 +341,12 @@ func (r *snapshotRepository) ListByParcelForOwner(parcelID, ownerID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
+	flags, err := flagsBySnapshot(r.db, ids)
+	if err != nil {
+		return nil, err
+	}
 	for i := range snapshots {
+		snapshots[i].Flags = flagsOrEmpty(flags[snapshots[i].ID])
 		snapshots[i].Measurements = measurements[snapshots[i].ID]
 		if snapshots[i].Measurements == nil {
 			snapshots[i].Measurements = map[string]float64{}

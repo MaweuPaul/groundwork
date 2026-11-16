@@ -61,8 +61,8 @@ func TestCreateSeriesQueuesAllWindows(t *testing.T) {
 	if ref.Windows != 8 || len(snaps.gotSeries.Windows) != 8 {
 		t.Errorf("windows = %d, want 8", ref.Windows)
 	}
-	if snaps.gotSeries.Template.MaxSceneCloudPct != 20 || snaps.gotSeries.Template.CloudScoreThreshold != 0.6 {
-		t.Errorf("cloud defaults not applied: %+v", snaps.gotSeries.Template)
+	if p := snaps.gotSeries.Template.Parameters; p["max_scene_cloud_pct"] != 20 || p["cloud_score_threshold"] != 0.6 || p["min_clear_pct"] != 50 {
+		t.Errorf("parameter defaults not applied: %v", p)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestCreateSeriesRejectsBadInput(t *testing.T) {
 			in.DateStart, in.DateEnd, in.IntervalMonths = "2020-01-01", "2026-10-31", 1
 		}},
 		{"end in the future", func(in *CreateSeriesInput) { in.DateEnd = "2026-12-01" }},
-		{"bad cloud setting", func(in *CreateSeriesInput) { in.MaxSceneCloudPct = ptr(0) }},
+		{"bad parameter", func(in *CreateSeriesInput) { in.Parameters = map[string]float64{"max_scene_cloud_pct": 0} }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

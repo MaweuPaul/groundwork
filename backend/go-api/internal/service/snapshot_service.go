@@ -3,7 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
-	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,14 +29,6 @@ var sentinel2Start = time.Date(2015, 6, 23, 0, 0, 0, 0, time.UTC)
 // maxSnapshotRange keeps one Earth Engine job to at most a year of imagery.
 const maxSnapshotRange = 366 * 24 * time.Hour
 
-// Cloud Score+ cs_cdf a pixel needs to count as clear, unless the request sets one.
-// Google recommends 0.50 to 0.65; outside 0.40 to 0.80 results stop being useful.
-const (
-	defaultCloudScoreThreshold = 0.60
-	minCloudScoreThreshold     = 0.40
-	maxCloudScoreThreshold     = 0.80
-)
-
 type CreateSnapshotInput struct {
 	ParcelID           uuid.UUID
 	OwnerID            uuid.UUID
@@ -44,9 +36,8 @@ type CreateSnapshotInput struct {
 	MethodologyVersion string // required; never defaults to the latest
 	DateStart          string // YYYY-MM-DD
 	DateEnd            string // YYYY-MM-DD
-	// Optional; nil uses the methodology's max_cloud_pct and the default threshold.
-	MaxSceneCloudPct    *float64
-	CloudScoreThreshold *float64
+	// Optional; any the methodology takes but the request leaves out get their defaults.
+	Parameters map[string]float64
 }
 
 type SnapshotService interface {
@@ -110,45 +101,57 @@ func (s *snapshotService) CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, err
 		return uuid.Nil, ErrUnknownMethodology
 	}
 
-	cloudPct, threshold, err := cloudOptions(in, m.MaxCloudPct)
+	params, err := s.resolveParameters(m.ID, in.Parameters)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
 	return s.snapshots.CreateWithJob(repository.NewSnapshot{
-		ParcelID:            in.ParcelID,
-		OwnerID:             in.OwnerID,
-		MethodologyID:       m.ID,
-		MethodologyVersion:  m.Version,
-		DateStart:           start,
-		DateEnd:             end,
-		MaxSceneCloudPct:    cloudPct,
-		CloudScoreThreshold: threshold,
+		ParcelID:           in.ParcelID,
+		OwnerID:            in.OwnerID,
+		MethodologyID:      m.ID,
+		MethodologyVersion: m.Version,
+		DateStart:          start,
+		DateEnd:            end,
+		Parameters:         params,
 	})
 }
 
-// cloudOptions applies the defaults and checks the ranges. Values are rounded the way
-// the database stores them (2 and 3 decimals), so the sealed record matches the request.
-func cloudOptions(in CreateSnapshotInput, methodologyDefault float64) (float64, float64, error) {
-	cloudPct := methodologyDefault
-	if in.MaxSceneCloudPct != nil {
-		cloudPct = math.Round(*in.MaxSceneCloudPct*100) / 100
-	}
-	if cloudPct <= 0 || cloudPct > 100 {
-		return 0, 0, &ValidationError{"max_scene_cloud_pct must be greater than 0 and at most 100"}
+// resolveParameters checks the request's parameters against the methodology's and fills in
+// defaults. The database checks the same rules on insert; this gives the client a clear message.
+func (s *snapshotService) resolveParameters(methodologyID uuid.UUID, given map[string]float64) (repository.Parameters, error) {
+	specs, err := s.methodologies.Parameters(methodologyID)
+	if err != nil {
+		return nil, err
 	}
 
-	threshold := defaultCloudScoreThreshold
-	if in.CloudScoreThreshold != nil {
-		threshold = math.Round(*in.CloudScoreThreshold*1000) / 1000
+	known := make(map[string]bool, len(specs))
+	for _, spec := range specs {
+		known[spec.Name] = true
 	}
-	if threshold < minCloudScoreThreshold || threshold > maxCloudScoreThreshold {
-		return 0, 0, &ValidationError{
-			fmt.Sprintf("cloud_score_threshold must be between %.2f and %.2f", minCloudScoreThreshold, maxCloudScoreThreshold),
+	var unknown []string
+	for name := range given {
+		if !known[name] {
+			unknown = append(unknown, name)
 		}
 	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return nil, &ValidationError{fmt.Sprintf("unknown parameter %q for this methodology", unknown[0])}
+	}
 
-	return cloudPct, threshold, nil
+	resolved := make(repository.Parameters, len(specs))
+	for _, spec := range specs {
+		value, ok := given[spec.Name]
+		if !ok {
+			value = spec.Default
+		}
+		if value < spec.Min || value > spec.Max {
+			return nil, &ValidationError{fmt.Sprintf("%s must be between %g and %g", spec.Name, spec.Min, spec.Max)}
+		}
+		resolved[spec.Name] = value
+	}
+	return resolved, nil
 }
 
 // limitRange caps the range at a year; a series range can be longer because each window is short.
