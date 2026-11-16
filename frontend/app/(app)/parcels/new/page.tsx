@@ -16,7 +16,7 @@ export default async function NewParcelPage() {
         icon={MapPinPlus}
         badge="Cadastre draft"
         title="Register new parcel"
-        description="Draw the boundary on the map or upload a GeoJSON file to add it to the verification ledger."
+        description="Draw the boundary on the map or upload a GeoJSON file or shapefile to add it to the verification ledger."
         actions={
           <span className="flex items-center gap-1.5 rounded-sm bg-surface-container px-3 py-1.5 font-mono text-micro text-muted-foreground">
             <ShieldCheck className="size-3.5" />

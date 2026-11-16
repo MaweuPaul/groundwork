@@ -36,11 +36,16 @@ export async function createParcelAction(
 
   const fieldErrors: ParcelFormState['fieldErrors'] = {};
   if (!values.name) fieldErrors.name = 'Give the parcel a name.';
-  if (!geometry) fieldErrors.geometry = 'Draw the boundary on the map or upload a GeoJSON file.';
+  if (!geometry) fieldErrors.geometry = 'Draw the boundary on the map or upload a GeoJSON file or shapefile.';
   if (fieldErrors.name || !geometry) return { fieldErrors, values };
 
   const metadata: Record<string, string> = {};
   if (values.region) metadata.region = values.region;
+  const boundarySource = field(formData, 'boundary_source');
+  if (boundarySource) {
+    metadata.boundary_source = boundarySource;
+    metadata.boundary_crs = field(formData, 'boundary_crs');
+  }
 
   const result = await createParcel({
     name: values.name,

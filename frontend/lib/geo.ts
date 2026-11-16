@@ -65,7 +65,7 @@ export function bounds(polygons: PolygonCoords[]): [[number, number], [number, n
   return [[minX, minY], [maxX, maxY]];
 }
 
-type GeoJSONInput = { type?: string; geometry?: GeoJSONInput; features?: GeoJSONInput[]; coordinates?: unknown };
+export type GeoJSONInput = { type?: string; geometry?: GeoJSONInput; features?: GeoJSONInput[]; coordinates?: unknown };
 
 function geometriesOf(input: GeoJSONInput): GeoJSONInput[] {
   if (input.type === 'FeatureCollection') return (input.features ?? []).flatMap(geometriesOf);
@@ -108,7 +108,10 @@ export function parseBoundary(text: string): PolygonCoords[] {
   } catch {
     throw new Error('The file is not valid JSON.');
   }
+  return polygonsOf(input);
+}
 
+export function polygonsOf(input: GeoJSONInput): PolygonCoords[] {
   const polygons: PolygonCoords[] = [];
   for (const geometry of geometriesOf(input)) {
     if (geometry.type === 'Polygon') polygons.push(toPolygon(geometry.coordinates));
