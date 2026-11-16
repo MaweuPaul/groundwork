@@ -9,6 +9,7 @@ import MeasurementsPanel from '@/components/features/snapshots/measurements-pane
 import MethodologyPanel from '@/components/features/snapshots/methodology-panel';
 import ProcessingPanel from '@/components/features/snapshots/processing-panel';
 import Border from '@/components/shared/border';
+import FlagBadge from '@/components/shared/flag-badge';
 import LiveRefresh from '@/components/shared/live-refresh';
 import StatusBadge from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
@@ -65,6 +66,7 @@ export default async function SnapshotPage({ params }: { params: Promise<{ ref: 
               </span>
             )}
             <StatusBadge status={s.status} />
+            {s.flags?.map((f) => <FlagBadge key={f.flag} flag={f} />)}
             {s.completed_at && (
               <span className="font-mono text-micro text-muted-foreground">Sealed {formatUtc(s.completed_at)}</span>
             )}

@@ -92,6 +92,8 @@ export type Snapshot = {
   methodology_version: string;
   date_start: string;
   date_end: string;
+  parameters: Record<string, number>;
+  flags: SnapshotFlag[];
   max_scene_cloud_pct: number;
   cloud_score_threshold: number;
   record_format: number;
@@ -106,6 +108,13 @@ export type Snapshot = {
   measurements: Record<string, number>;
   imagery_sources: ImagerySource[];
   ndvi_image?: NdviImage;
+};
+
+// A quality warning raised by the worker and sealed with the record, e.g. low_coverage.
+// A flagged snapshot still completed; the flag says how far to trust it.
+export type SnapshotFlag = {
+  flag: string;
+  detail?: string;
 };
 
 export type NewSnapshot = {
@@ -132,6 +141,8 @@ export type SnapshotSummary = {
   methodology_version: string;
   date_start: string;
   date_end: string;
+  parameters: Record<string, number>;
+  flags: SnapshotFlag[];
   max_scene_cloud_pct: number;
   cloud_score_threshold: number;
   created_at: string;
