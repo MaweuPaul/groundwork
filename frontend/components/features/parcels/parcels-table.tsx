@@ -1,8 +1,9 @@
 import { Grid2x2 } from 'lucide-react';
 import Link from 'next/link';
 
+import LocalTime from '@/components/shared/local-time';
 import StatusBadge from '@/components/shared/status-badge';
-import { formatArea, formatCoordinates, formatDate, formatNdvi } from '@/lib/format';
+import { formatArea, formatCoordinates, formatNdvi } from '@/lib/format';
 import { parcelPath } from '@/lib/paths';
 import type { Parcel } from '@/lib/types';
 
@@ -53,7 +54,7 @@ const ParcelsTable = ({ parcels, compact = false }: { parcels: Parcel[]; compact
                 {formatNdvi(parcel.latest_result?.measurements.ndvi_mean)}
               </td>
               <td className="px-5 py-4 font-mono text-caption whitespace-nowrap text-muted-foreground">
-                {parcel.latest_result ? formatDate(parcel.latest_result.completed_at) : '—'}
+                {parcel.latest_result ? <LocalTime iso={parcel.latest_result.completed_at} style="date" /> : '—'}
               </td>
               <td className="px-5 py-4">
                 <StatusBadge status={parcel.latest_snapshot?.status ?? null} />

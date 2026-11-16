@@ -7,8 +7,9 @@ import Border from '@/components/shared/border';
 import ClickableRow from '@/components/shared/clickable-row';
 import CopyButton from '@/components/shared/copy-button';
 import FlagBadge from '@/components/shared/flag-badge';
+import LocalTime from '@/components/shared/local-time';
 import StatusBadge from '@/components/shared/status-badge';
-import { formatDate, formatNdvi } from '@/lib/format';
+import { formatNdvi } from '@/lib/format';
 import { snapshotPath } from '@/lib/paths';
 import type { Methodology, SnapshotSummary } from '@/lib/types';
 
@@ -45,7 +46,12 @@ const SnapshotHistory = ({
         </h2>
         <span className="font-mono text-micro tracking-[0.1em] text-muted-foreground uppercase">
           {sealed.length} sealed
-          {latestSealed?.completed_at && ` · latest ${formatDate(latestSealed.completed_at)} UTC`}
+          {latestSealed?.completed_at && (
+            <>
+              {' '}
+              · latest <LocalTime iso={latestSealed.completed_at} style="date" />
+            </>
+          )}
         </span>
       </div>
 
@@ -82,7 +88,9 @@ const SnapshotHistory = ({
                       scenes ≤{s.max_scene_cloud_pct}% · clear ≥{s.cloud_score_threshold.toFixed(2)}
                     </span>
                     {s.series_short_id && (
-                      <span className="mt-1 block font-mono text-micro text-olive uppercase">Series {s.series_short_id}</span>
+                      <span className="mt-1 block font-mono text-micro text-olive uppercase">
+                        Series {s.series_short_id}
+                      </span>
                     )}
                   </td>
                   <td className="px-5 py-4 font-mono text-label font-semibold">

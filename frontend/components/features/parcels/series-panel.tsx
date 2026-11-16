@@ -2,7 +2,7 @@ import { Layers3, ShieldCheck } from 'lucide-react';
 
 import Border from '@/components/shared/border';
 import CopyButton from '@/components/shared/copy-button';
-import { formatUtc } from '@/lib/format';
+import LocalTime from '@/components/shared/local-time';
 import type { SeriesSummary } from '@/lib/types';
 
 const months = (n: number) => `${n} ${n === 1 ? 'month' : 'months'}`;
@@ -47,7 +47,7 @@ const SeriesPanel = ({ series }: { series: SeriesSummary[] }) => {
               {s.record_hash && s.sealed_at ? (
                 <div className="flex items-center gap-2 font-mono text-micro">
                   <ShieldCheck className="size-3.5 shrink-0 text-olive" />
-                  <span className="text-muted-foreground">Sealed {formatUtc(s.sealed_at)}</span>
+                  <span className="text-muted-foreground">Sealed <LocalTime iso={s.sealed_at} /></span>
                   <span className="truncate">{s.record_hash}</span>
                   <CopyButton value={s.record_hash} label="Copy series hash" />
                 </div>

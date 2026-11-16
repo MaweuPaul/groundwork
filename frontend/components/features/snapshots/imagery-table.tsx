@@ -1,7 +1,7 @@
 import { Satellite } from 'lucide-react';
 
 import Border from '@/components/shared/border';
-import { formatUtc } from '@/lib/format';
+import LocalTime from '@/components/shared/local-time';
 import type { ImagerySource, SnapshotStatus } from '@/lib/types';
 
 const columns = ['Scene identifier', 'Satellite', 'Acquired', 'Scene cloud'];
@@ -46,7 +46,7 @@ const ImageryTable = ({ sources, status }: { sources: ImagerySource[]; status: S
                   <td className="px-5 py-3 font-mono text-caption break-all">{s.scene_id}</td>
                   <td className="px-5 py-3 font-mono text-caption whitespace-nowrap capitalize">{s.satellite}</td>
                   <td className="px-5 py-3 font-mono text-caption whitespace-nowrap text-muted-foreground">
-                    {formatUtc(s.acquisition_time)}
+                    <LocalTime iso={s.acquisition_time} />
                   </td>
                   <td className="px-5 py-3 font-mono text-caption">
                     {s.cloud_cover_pct === undefined || s.cloud_cover_pct === null ? '—' : `${s.cloud_cover_pct.toFixed(1)}%`}
