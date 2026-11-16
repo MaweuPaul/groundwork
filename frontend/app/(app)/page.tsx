@@ -40,7 +40,7 @@ export default async function OverviewPage() {
       {parcels.data.length === 0 ? (
         <GetStarted />
       ) : (
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <RecentParcels parcels={parcels.data.slice(0, RECENT_LIMIT)} total={parcels.data.length} />
           <RecentActivity
             events={activity.ok ? activity.data : []}

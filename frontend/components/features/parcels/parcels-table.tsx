@@ -8,7 +8,9 @@ import type { Parcel } from '@/lib/types';
 
 const columns = ['Parcel', 'Centroid', 'Area (ha)', 'Latest NDVI', 'Last result', 'Status'];
 
-const ParcelsTable = ({ parcels }: { parcels: Parcel[] }) => {
+// compact: for a narrower column next to other content; the centroid shows only on 2xl screens.
+const ParcelsTable = ({ parcels, compact = false }: { parcels: Parcel[]; compact?: boolean }) => {
+  const centroidClass = compact ? 'hidden 2xl:table-cell' : '';
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
@@ -17,7 +19,7 @@ const ParcelsTable = ({ parcels }: { parcels: Parcel[] }) => {
             {columns.map((column) => (
               <th
                 key={column}
-                className="px-5 py-3 font-mono text-micro font-semibold tracking-[0.12em] whitespace-nowrap text-muted-foreground uppercase"
+                className={`${column === 'Centroid' ? centroidClass : ''} px-5 py-3 font-mono text-micro font-semibold tracking-[0.12em] whitespace-nowrap text-muted-foreground uppercase`}
               >
                 {column}
               </th>
@@ -27,7 +29,7 @@ const ParcelsTable = ({ parcels }: { parcels: Parcel[] }) => {
         <tbody className="divide-y divide-border">
           {parcels.map((parcel) => (
             <tr key={parcel.id} className="transition-colors hover:bg-surface-low">
-              <td className="px-5 py-4">
+              <td className={`px-5 py-4 ${compact ? 'min-w-56' : ''}`}>
                 <Link href={parcelPath(parcel)} className="flex items-center gap-3">
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-surface-container text-olive">
                     <Grid2x2 className="size-4" />
@@ -41,10 +43,12 @@ const ParcelsTable = ({ parcels }: { parcels: Parcel[] }) => {
                   </span>
                 </Link>
               </td>
-              <td className="px-5 py-4 font-mono text-caption whitespace-nowrap text-muted-foreground">
+              <td
+                className={`${centroidClass} px-5 py-4 font-mono text-caption whitespace-nowrap text-muted-foreground`}
+              >
                 {formatCoordinates(parcel.centroid_lat, parcel.centroid_lon)}
               </td>
-              <td className="px-5 py-4 font-mono text-label">{formatArea(parcel.area_ha)}</td>
+              <td className="px-5 py-4 font-mono text-label whitespace-nowrap">{formatArea(parcel.area_ha)}</td>
               <td className="px-5 py-4 font-mono text-label font-semibold text-olive">
                 {formatNdvi(parcel.latest_result?.measurements.ndvi_mean)}
               </td>

@@ -24,7 +24,7 @@ const RecentParcels = ({ parcels, total }: { parcels: Parcel[]; total: number })
         </Button>
       </div>
 
-      <ParcelsTable parcels={parcels} />
+      <ParcelsTable parcels={parcels} compact />
 
       <div className="flex items-center justify-between border-t border-border px-5 py-3 text-label text-muted-foreground">
         <span>
