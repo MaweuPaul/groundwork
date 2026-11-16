@@ -6,6 +6,7 @@ import RunSnapshotDialog from '@/components/features/parcels/run-snapshot-dialog
 import Border from '@/components/shared/border';
 import ClickableRow from '@/components/shared/clickable-row';
 import CopyButton from '@/components/shared/copy-button';
+import FlagBadge from '@/components/shared/flag-badge';
 import StatusBadge from '@/components/shared/status-badge';
 import { formatDate, formatNdvi } from '@/lib/format';
 import { snapshotPath } from '@/lib/paths';
@@ -94,6 +95,11 @@ const SnapshotHistory = ({
                   </td>
                   <td className="px-5 py-4">
                     <StatusBadge status={s.status} />
+                    {s.flags?.map((f) => (
+                      <span key={f.flag} className="mt-1.5 block">
+                        <FlagBadge flag={f} />
+                      </span>
+                    ))}
                     {s.status === 'failed' && s.failure_message && <FailureReason message={s.failure_message} />}
                     {s.status === 'failed' && (
                       <RunSnapshotDialog

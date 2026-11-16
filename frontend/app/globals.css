@@ -26,6 +26,8 @@
   --danger: #ba1a1a;
   --danger-container: #ffdad6;
   --on-danger-container: #93000a;
+  --warning-container: #ffe3b0;
+  --on-warning-container: #5c3d00;
 
   /* shadcn tokens, mapped onto the palette above. */
   --background: #fff9ed;
@@ -84,6 +86,8 @@
   --color-danger: var(--danger);
   --color-danger-container: var(--danger-container);
   --color-on-danger-container: var(--on-danger-container);
+  --color-warning-container: var(--warning-container);
+  --color-on-warning-container: var(--on-warning-container);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);

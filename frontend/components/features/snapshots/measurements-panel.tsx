@@ -1,4 +1,4 @@
-import { Sprout } from 'lucide-react';
+import { Sprout, TriangleAlert } from 'lucide-react';
 
 import Border from '@/components/shared/border';
 import type { Snapshot } from '@/lib/types';
@@ -9,6 +9,8 @@ const MeasurementsPanel = ({ snapshot }: { snapshot: Snapshot }) => {
   const m = snapshot.measurements;
   const valid = m.valid_pixel_pct;
   const vis = snapshot.ndvi_image?.visualization;
+  const minClear = snapshot.parameters?.min_clear_pct;
+  const lowCoverage = snapshot.flags?.find((f) => f.flag === 'low_coverage');
 
   return (
     <Border className="flex flex-col gap-4 p-5">
@@ -52,11 +54,33 @@ const MeasurementsPanel = ({ snapshot }: { snapshot: Snapshot }) => {
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between font-mono text-micro text-muted-foreground">
                 <span>Valid-pixel coverage</span>
-                <span>{valid.toFixed(1)}%</span>
+                <span>
+                  {valid.toFixed(1)}%{minClear !== undefined && ` · minimum ${minClear}%`}
+                </span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-surface-high">
-                <div className="h-full rounded-full bg-primary-container" style={{ width: `${Math.min(100, valid)}%` }} />
+              <div className="relative h-2 rounded-full bg-surface-high">
+                <div
+                  className={`h-full rounded-full ${lowCoverage ? 'bg-on-warning-container' : 'bg-primary-container'}`}
+                  style={{ width: `${Math.min(100, valid)}%` }}
+                />
+                {minClear !== undefined && (
+                  <div
+                    className="absolute -top-1 h-4 w-0.5 bg-foreground"
+                    style={{ left: `${Math.min(100, minClear)}%` }}
+                    title={`Minimum clear pixels: ${minClear}%`}
+                  />
+                )}
               </div>
+            </div>
+          )}
+
+          {lowCoverage && (
+            <div className="flex gap-2 rounded-sm bg-warning-container p-3 text-label text-on-warning-container">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+              <p>
+                <span className="font-semibold">Low coverage.</span> {lowCoverage.detail} The values are from the clear
+                part of the parcel only, so treat them with care.
+              </p>
             </div>
           )}
         </>

@@ -31,14 +31,20 @@ const MASKS = [
   { value: 0.5, label: 'Lenient', help: 'More pixels in cloudy seasons' },
 ];
 
+const MIN_CLEAR_PRESETS = [25, 50, 75];
+
 export type SnapshotOptions = {
   dateStart: string;
   dateEnd: string;
   maxSceneCloudPct: number;
   cloudScoreThreshold: number;
+  // Missing on snapshots from before min_clear_pct existed.
+  minClearPct?: number;
 };
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+
+const spec = (m: Methodology | undefined, name: string) => m?.parameters?.find((p) => p.name === name);
 
 const MONTH_CHOICES = [1, 2, 3, 6, 12];
 
@@ -57,6 +63,8 @@ const HELP = {
     'Sentinel-2 rates each whole scene (~100 × 100 km) by cloud cover. Scenes above this limit are skipped. Clouds over your parcel are still removed pixel by pixel, so a higher limit often finds clear views in rainy seasons.',
   mask:
     'How sure Cloud Score+ must be that a pixel is clear before it is used. Strict avoids haze but keeps fewer pixels; lenient keeps more in cloudy seasons.',
+  minClear:
+    'If less of the parcel than this is clear after masking, the snapshot still completes but is flagged low coverage, so readers know its values come from only part of the parcel.',
 };
 const MAX_WINDOWS = 24;
 
@@ -116,6 +124,7 @@ const RunSnapshotDialog = ({
   const [methodologyKey, setMethodologyKey] = useState(first ? `${first.slug}@${first.version}` : '');
   const [cloudPct, setCloudPct] = useState(String(initial?.maxSceneCloudPct ?? first?.max_cloud_pct ?? 20));
   const [threshold, setThreshold] = useState(initial?.cloudScoreThreshold ?? 0.6);
+  const [minClear, setMinClear] = useState(String(initial?.minClearPct ?? spec(first, 'min_clear_pct')?.default ?? 50));
   const [mode, setMode] = useState<'single' | 'series'>('single');
   const [windowMonths, setWindowMonths] = useState(1);
   const [intervalMonths, setIntervalMonths] = useState(3);
@@ -130,6 +139,7 @@ const RunSnapshotDialog = ({
   );
 
   const selected = methodologies.find((m) => `${m.slug}@${m.version}` === methodologyKey);
+  const minClearSpec = spec(selected, 'min_clear_pct');
   const today = isoDay(new Date());
   const windows = mode === 'series' ? seriesWindows(dateStart, dateEnd, windowMonths, intervalMonths) : [];
   const tooMany = windows.length > MAX_WINDOWS;
@@ -160,7 +170,7 @@ const RunSnapshotDialog = ({
 
         <form action={formAction} className="flex min-h-0 flex-col">
           <input type="hidden" name="parcel_id" value={parcelId} />
-          <input type="hidden" name="cloud_score_threshold" value={threshold} />
+          <input type="hidden" name="param.cloud_score_threshold" value={threshold} />
           <input type="hidden" name="mode" value={mode} />
           <input type="hidden" name="window_months" value={windowMonths} />
           <input type="hidden" name="interval_months" value={intervalMonths} />
@@ -344,7 +354,7 @@ const RunSnapshotDialog = ({
                   <div className="flex items-center gap-1">
                     <input
                       id="max_scene_cloud_pct"
-                      name="max_scene_cloud_pct"
+                      name="param.max_scene_cloud_pct"
                       type="number"
                       min={1}
                       max={100}
@@ -387,8 +397,49 @@ const RunSnapshotDialog = ({
                 </div>
               </div>
 
+              {minClearSpec && (
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="min_clear_pct" className={labelClass}>
+                    <span className="flex items-center gap-1.5">
+                      Minimum clear pixels
+                      <InfoTip label="minimum clear pixels">{HELP.minClear}</InfoTip>
+                    </span>
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {MIN_CLEAR_PRESETS.map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => setMinClear(String(pct))}
+                        className={`${choiceClass(Number(minClear) === pct)} px-3 py-1.5 font-mono text-label`}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                    <div className="flex items-center gap-1">
+                      <input
+                        id="min_clear_pct"
+                        name="param.min_clear_pct"
+                        type="number"
+                        min={minClearSpec.min}
+                        max={minClearSpec.max}
+                        step={1}
+                        required
+                        value={minClear}
+                        onChange={(e) => setMinClear(e.target.value)}
+                        className={`${inputClass} w-20 py-1.5`}
+                      />
+                      <span className="font-mono text-label text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  <p className="text-caption text-muted-foreground">
+                    Below this, the snapshot is still sealed but flagged low coverage. It never fails for it.
+                  </p>
+                </div>
+              )}
+
               <p className="font-mono text-micro text-muted-foreground">
-                Both settings are saved with the snapshot and sealed into its record hash.
+                These settings are saved with the snapshot and sealed into its record hash.
               </p>
             </fieldset>
 

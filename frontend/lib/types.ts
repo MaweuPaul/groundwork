@@ -92,6 +92,8 @@ export type Snapshot = {
   methodology_version: string;
   date_start: string;
   date_end: string;
+  parameters: Record<string, number>;
+  flags: SnapshotFlag[];
   max_scene_cloud_pct: number;
   cloud_score_threshold: number;
   record_format: number;
@@ -108,14 +110,20 @@ export type Snapshot = {
   ndvi_image?: NdviImage;
 };
 
+// A quality warning raised by the worker and sealed with the record, e.g. low_coverage.
+// A flagged snapshot still completed; the flag says how far to trust it.
+export type SnapshotFlag = {
+  flag: string;
+  detail?: string;
+};
+
 export type NewSnapshot = {
   methodology: string;
   methodology_version: string;
   date_start: string;
   date_end: string;
-  // Omitted means the methodology's default; both are sealed into the record.
-  max_scene_cloud_pct?: number;
-  cloud_score_threshold?: number;
+  // Any the methodology takes but this leaves out get their defaults; all are sealed into the record.
+  parameters?: Record<string, number>;
 };
 
 export type QueuedSnapshot = {
@@ -132,6 +140,8 @@ export type SnapshotSummary = {
   methodology_version: string;
   date_start: string;
   date_end: string;
+  parameters: Record<string, number>;
+  flags: SnapshotFlag[];
   max_scene_cloud_pct: number;
   cloud_score_threshold: number;
   created_at: string;
@@ -179,4 +189,15 @@ export type Methodology = {
   composite_method: string;
   date_lookback_days: number;
   created_at: string;
+  parameters: MethodologyParameter[];
+};
+
+// A setting a methodology accepts. The API rejects values outside min to max.
+export type MethodologyParameter = {
+  name: string;
+  label: string;
+  type: string;
+  min: number;
+  max: number;
+  default: number;
 };

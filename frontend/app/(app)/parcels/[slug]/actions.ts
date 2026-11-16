@@ -10,6 +10,8 @@ export type SnapshotFormState = {
   values?: { methodology: string; date_start: string; date_end: string };
 };
 
+const PARAM_PREFIX = 'param.';
+
 const field = (formData: FormData, name: string) => String(formData.get(name) ?? '').trim();
 
 export async function runSnapshotAction(
@@ -28,11 +30,15 @@ export async function runSnapshotAction(
   if (!methodology || !methodologyVersion) return { error: 'Choose a methodology.', values };
   if (!values.date_start || !values.date_end) return { error: 'Choose a start and end date.', values };
 
-  // Range checks happen in the API, which owns the rules and returns a readable message.
-  const cloudPct = Number(field(formData, 'max_scene_cloud_pct'));
-  const threshold = Number(field(formData, 'cloud_score_threshold'));
-  if (!Number.isFinite(cloudPct) || !Number.isFinite(threshold)) {
-    return { error: 'Cloud settings must be numbers.', values };
+  // Inputs named "param.<name>" are the methodology's parameters. Range checks happen in the
+  // API, which owns the rules and returns a readable message.
+  const parameters: Record<string, number> = {};
+  for (const [key, raw] of formData) {
+    if (!key.startsWith(PARAM_PREFIX)) continue;
+    const text = String(raw).trim();
+    const value = Number(text);
+    if (text === '' || !Number.isFinite(value)) return { error: 'Settings must be numbers.', values };
+    parameters[key.slice(PARAM_PREFIX.length)] = value;
   }
 
   const request = {
@@ -40,8 +46,7 @@ export async function runSnapshotAction(
     methodology_version: methodologyVersion,
     date_start: values.date_start,
     date_end: values.date_end,
-    max_scene_cloud_pct: cloudPct,
-    cloud_score_threshold: threshold,
+    parameters,
   };
   const result =
     field(formData, 'mode') === 'series'
