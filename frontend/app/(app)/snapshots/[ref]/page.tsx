@@ -11,10 +11,10 @@ import ProcessingPanel from '@/components/features/snapshots/processing-panel';
 import Border from '@/components/shared/border';
 import FlagBadge from '@/components/shared/flag-badge';
 import LiveRefresh from '@/components/shared/live-refresh';
+import LocalTime from '@/components/shared/local-time';
 import StatusBadge from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
 import { getMethodologies, getParcel, getSnapshot } from '@/lib/api';
-import { formatUtc } from '@/lib/format';
 import { parcelPath, snapshotPath } from '@/lib/paths';
 import type { Snapshot } from '@/lib/types';
 
@@ -68,7 +68,7 @@ export default async function SnapshotPage({ params }: { params: Promise<{ ref: 
             <StatusBadge status={s.status} />
             {s.flags?.map((f) => <FlagBadge key={f.flag} flag={f} />)}
             {s.completed_at && (
-              <span className="font-mono text-micro text-muted-foreground">Sealed {formatUtc(s.completed_at)}</span>
+              <span className="font-mono text-micro text-muted-foreground">Sealed <LocalTime iso={s.completed_at} /></span>
             )}
           </div>
           <h1 className="text-display font-semibold tracking-tight">

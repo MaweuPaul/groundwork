@@ -3,9 +3,9 @@ import { Activity, RotateCcw } from 'lucide-react';
 import { retryPlan } from '@/components/features/parcels/retry-plan';
 import RunSnapshotDialog from '@/components/features/parcels/run-snapshot-dialog';
 import Border from '@/components/shared/border';
+import LocalTime from '@/components/shared/local-time';
 import StatusBadge from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
-import { formatUtc } from '@/lib/format';
 import type { Methodology, Snapshot } from '@/lib/types';
 
 const jobLabels: Record<string, string> = {
@@ -53,13 +53,13 @@ const ProcessingPanel = ({
             <Row label="Attempts">
               {job.attempts} of {job.max_attempts}
             </Row>
-            {job.next_attempt_at && <Row label="Next attempt">{formatUtc(job.next_attempt_at)}</Row>}
+            {job.next_attempt_at && <Row label="Next attempt"><LocalTime iso={job.next_attempt_at} /></Row>}
             {job.last_error_code && <Row label="Last error">{job.last_error_code}</Row>}
           </>
         )}
-        <Row label="Requested">{formatUtc(snapshot.created_at)}</Row>
-        {snapshot.started_at && <Row label="Started">{formatUtc(snapshot.started_at)}</Row>}
-        {snapshot.completed_at && <Row label="Completed">{formatUtc(snapshot.completed_at)}</Row>}
+        <Row label="Requested"><LocalTime iso={snapshot.created_at} /></Row>
+        {snapshot.started_at && <Row label="Started"><LocalTime iso={snapshot.started_at} /></Row>}
+        {snapshot.completed_at && <Row label="Completed"><LocalTime iso={snapshot.completed_at} /></Row>}
       </div>
 
       {snapshot.status === 'failed' && reason && (

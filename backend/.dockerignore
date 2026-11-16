@@ -1,0 +1,9 @@
+**/.env
+**/.env.*
+**/credentials
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+gee-service/tests
+go-api/internal/integration

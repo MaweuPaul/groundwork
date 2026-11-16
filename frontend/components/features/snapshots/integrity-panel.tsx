@@ -2,7 +2,7 @@ import { Link2, ShieldCheck } from 'lucide-react';
 
 import Border from '@/components/shared/border';
 import CopyButton from '@/components/shared/copy-button';
-import { formatUtc } from '@/lib/format';
+import LocalTime from '@/components/shared/local-time';
 import type { Snapshot } from '@/lib/types';
 
 // What each record format seals, matching snapshot_record_text() in the database.
@@ -50,7 +50,7 @@ const IntegrityPanel = ({ snapshot }: { snapshot: Snapshot }) => {
             <HashRow label="Boundary hash" value={snapshot.geometry_hash} />
           </div>
           <p className="text-caption text-muted-foreground">
-            Sealed {snapshot.completed_at && formatUtc(snapshot.completed_at)} as record #{snapshot.chain_seq} (format
+            Sealed {snapshot.completed_at && <LocalTime iso={snapshot.completed_at} />} as record #{snapshot.chain_seq} (format
             v{snapshot.record_format}). The record hash covers {coveredBy(snapshot.record_format)}, and the previous
             record&apos;s hash, so changing anything in this record or any earlier one breaks the chain. The
             database&apos;s <code className="font-mono">verify_snapshot_chain()</code> recomputes every hash to check

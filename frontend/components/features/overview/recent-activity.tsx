@@ -3,6 +3,7 @@ import Link from 'next/link';
 
 import Border from '@/components/shared/border';
 import { flagLabel } from '@/components/shared/flag-badge';
+import LocalTime from '@/components/shared/local-time';
 import { formatNdvi } from '@/lib/format';
 import { parcelPath, snapshotPath } from '@/lib/paths';
 import type { ActivityEvent } from '@/lib/types';
@@ -17,18 +18,6 @@ const dot: Record<ActivityEvent['kind'], string> = {
   series_started: 'bg-olive',
   series_sealed: 'bg-primary',
 };
-
-// "Today 14:22 UTC", "Yesterday 09:15 UTC", else "2026-11-03 21:20 UTC". Days are UTC days.
-function when(iso: string, now = new Date()) {
-  const at = new Date(iso);
-  const day = (d: Date) => d.toISOString().slice(0, 10);
-  const time = at.toISOString().slice(11, 16);
-  const yesterday = new Date(now);
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  if (day(at) === day(now)) return `Today ${time} UTC`;
-  if (day(at) === day(yesterday)) return `Yesterday ${time} UTC`;
-  return `${day(at)} ${time} UTC`;
-}
 
 // failure_message is "CODE: reason"; only the reason is shown.
 const reason = (message?: string) => message?.split(': ').slice(1).join(': ') || message;
@@ -89,7 +78,6 @@ const RecentActivity = ({ events, error }: { events: ActivityEvent[]; error?: st
           <Activity className="size-5" />
           Recent activity
         </h2>
-        <span className="font-mono text-micro tracking-[0.12em] text-muted-foreground uppercase">UTC</span>
       </div>
 
       {error ? (
@@ -108,7 +96,9 @@ const RecentActivity = ({ events, error }: { events: ActivityEvent[]; error?: st
               )}
               <span className={`relative mt-1.5 size-2.5 shrink-0 rounded-full ${dot[e.kind]}`} aria-hidden />
               <div className="flex min-w-0 flex-col gap-1">
-                <span className="font-mono text-micro text-muted-foreground">{when(e.at)}</span>
+                <span className="font-mono text-micro text-muted-foreground">
+                  <LocalTime iso={e.at} style="day-time" />
+                </span>
                 <p className="text-label">
                   <Sentence e={e} />
                 </p>

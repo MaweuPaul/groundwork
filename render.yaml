@@ -1,0 +1,30 @@
+# Render Blueprint: the Go API and the Python worker in one free web service.
+# Free services sleep after 15 minutes without requests and take about a minute to wake;
+# a request to the API wakes the worker too. Secrets marked sync: false are entered in
+# the Render dashboard when the Blueprint is created, never committed.
+services:
+  - type: web
+    name: groundwork-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: WORKER_DATABASE_URL
+        sync: false
+      - key: GEE_PROJECT
+        sync: false
+      - key: GEE_CREDENTIALS_JSON
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LOG_FORMAT
+        value: json
+      - key: WORKER_ID
+        value: render
