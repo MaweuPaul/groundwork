@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import { ACCESS_COOKIE } from "@/lib/session";
 import type {
+  ActivityEvent,
   Methodology,
   NewParcel,
   NewSeries,
@@ -72,6 +73,8 @@ export const getMe = cache(() => api<User>("/me"));
 export const getMethodologies = () => api<Methodology[]>("/methodologies");
 
 export const getParcels = () => api<Parcel[]>("/parcels");
+
+export const getActivity = (limit = 10) => api<ActivityEvent[]>(`/activity?limit=${limit}`);
 
 export const getParcel = (parcelId: string) => api<Parcel>(`/parcels/${id(parcelId)}`);
 

@@ -201,3 +201,25 @@ export type MethodologyParameter = {
   max: number;
   default: number;
 };
+
+// One line of the recent-activity feed. Fields that don't apply to a kind are left out.
+export type ActivityEvent = {
+  kind:
+    | 'parcel_registered'
+    | 'snapshot_queued'
+    | 'snapshot_completed'
+    | 'snapshot_failed'
+    | 'series_started'
+    | 'series_sealed';
+  at: string;
+  parcel_id: string;
+  parcel_short_id: string;
+  parcel_name: string;
+  snapshot_short_id?: string;
+  series_short_id?: string;
+  record_hash?: string;
+  ndvi_mean?: number;
+  windows?: number;
+  flags?: string[];
+  detail?: string;
+};
