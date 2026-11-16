@@ -37,9 +37,7 @@ export function retryPlan(s: RetrySource): { initial: SnapshotOptions; note: str
   const same: SnapshotOptions = {
     dateStart: s.date_start,
     dateEnd: s.date_end,
-    maxSceneCloudPct: s.max_scene_cloud_pct,
-    cloudScoreThreshold: s.cloud_score_threshold,
-    minClearPct: s.parameters?.min_clear_pct,
+    parameters: { ...s.parameters },
   };
   const code = failureCode(s.failure_message);
   if (code === 'COMPUTATION_TOO_LARGE') {
@@ -54,20 +52,25 @@ export function retryPlan(s: RetrySource): { initial: SnapshotOptions; note: str
     return { initial: same, note: 'Prefilled with the failed attempt’s settings. Adjust any of them before starting.' };
   }
 
-  const cloudPct = Math.max(60, Math.min(100, s.max_scene_cloud_pct * 2));
+  const scenePct = s.parameters?.max_scene_cloud_pct ?? s.max_scene_cloud_pct;
+  const cloudPct = Math.max(60, Math.min(100, scenePct * 2));
   const dateStart = widened(s.date_start, s.date_end);
-  const changes = [`scenes up to ${cloudPct}% cloud (was ${s.max_scene_cloud_pct}%)`];
+  const changes = [`scenes up to ${cloudPct}% cloud (was ${scenePct}%)`];
   if (dateStart !== s.date_start) changes.push(`a ${MIN_WINDOW_DAYS}-day window`);
 
   if (code === 'NO_CLEAR_PIXELS') {
     changes.push('the lenient clear-pixel mask');
     return {
-      initial: { ...same, dateStart, maxSceneCloudPct: cloudPct, cloudScoreThreshold: 0.5 },
+      initial: {
+        ...same,
+        dateStart,
+        parameters: { ...same.parameters, max_scene_cloud_pct: cloudPct, cloud_score_threshold: 0.5 },
+      },
       note: `Every scene was cloudy over the parcel. Suggested: ${changes.join(', ')}.`,
     };
   }
   return {
-    initial: { ...same, dateStart, maxSceneCloudPct: cloudPct },
-    note: `No scene passed the ${s.max_scene_cloud_pct}% cloud limit. Suggested: ${changes.join(', ')}. Clouds over the parcel are still masked pixel by pixel.`,
+    initial: { ...same, dateStart, parameters: { ...same.parameters, max_scene_cloud_pct: cloudPct } },
+    note: `No scene passed the ${scenePct}% cloud limit. Suggested: ${changes.join(', ')}. Clouds over the parcel are still masked pixel by pixel.`,
   };
 }

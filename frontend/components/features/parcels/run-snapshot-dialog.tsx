@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, CirclePlay, CloudSun, Lightbulb, Lock, PlusCircle, Satellite } from 'lucide-react';
+import { ChevronDown, CirclePlay, Lightbulb, Lock, PlusCircle, Satellite, SlidersHorizontal } from 'lucide-react';
 import { useActionState, useState } from 'react';
 
 import { runSnapshotAction, type SnapshotFormState } from '@/app/(app)/parcels/[slug]/actions';
@@ -17,34 +17,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import type { Methodology } from '@/lib/types';
+import type { Methodology, MethodologyParameter } from '@/lib/types';
 
 // Sentinel-2B's first imagery; the API rejects earlier start dates.
 const EARLIEST = '2015-06-23';
 
-const CLOUD_PRESETS = [20, 40, 60, 80];
-
-// Cloud Score+ cs_cdf a pixel needs to count as clear. The API accepts 0.40 to 0.80.
+// Cloud Score+ cs_cdf a pixel needs to count as clear.
 const MASKS = [
   { value: 0.65, label: 'Strict', help: 'Fewer pixels, least haze' },
   { value: 0.6, label: 'Standard', help: 'Google’s recommended balance' },
   { value: 0.5, label: 'Lenient', help: 'More pixels in cloudy seasons' },
 ];
 
-const MIN_CLEAR_PRESETS = [25, 50, 75];
-
 export type SnapshotOptions = {
   dateStart: string;
   dateEnd: string;
-  maxSceneCloudPct: number;
-  cloudScoreThreshold: number;
-  // Missing on snapshots from before min_clear_pct existed.
-  minClearPct?: number;
+  parameters?: Record<string, number>;
 };
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
-
-const spec = (m: Methodology | undefined, name: string) => m?.parameters?.find((p) => p.name === name);
 
 const MONTH_CHOICES = [1, 2, 3, 6, 12];
 
@@ -66,6 +57,41 @@ const HELP = {
   minClear:
     'If less of the parcel than this is clear after masking, the snapshot still completes but is flagged low coverage, so readers know its values come from only part of the parcel.',
 };
+
+// Friendlier controls for parameters we know. Any other parameter gets a plain number input.
+type Extra = {
+  label: string;
+  unit?: string;
+  presets?: number[];
+  choices?: typeof MASKS;
+  help: string;
+  note?: string;
+};
+
+const EXTRAS: Record<string, Extra> = {
+  max_scene_cloud_pct: {
+    label: 'Max scene cloud cover',
+    unit: '%',
+    presets: [20, 40, 60, 80],
+    help: HELP.cloud,
+    note: 'Skips whole scenes cloudier than this across their ~100 km tile. Clouds over the parcel are masked pixel by pixel anyway, so a higher limit often finds clear views in rainy seasons.',
+  },
+  cloud_score_threshold: { label: 'Clear-pixel mask', choices: MASKS, help: HELP.mask },
+  min_clear_pct: {
+    label: 'Minimum clear pixels',
+    unit: '%',
+    presets: [25, 50, 75],
+    help: HELP.minClear,
+    note: 'Below this, the snapshot is still sealed but flagged low coverage. It never fails for it.',
+  },
+};
+
+const EXTRA_ORDER = Object.keys(EXTRAS);
+const rank = (name: string) => (EXTRA_ORDER.includes(name) ? EXTRA_ORDER.indexOf(name) : EXTRA_ORDER.length);
+
+const defaultsFor = (m: Methodology | undefined, given?: Record<string, number>) =>
+  Object.fromEntries((m?.parameters ?? []).map((p) => [p.name, String(given?.[p.name] ?? p.default)]));
+
 const MAX_WINDOWS = 24;
 
 // Same rule as the API: a window every `interval` months, `length` months long, the last
@@ -100,6 +126,94 @@ const choiceClass = (active: boolean) =>
     active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-surface-lowest hover:border-outline'
   }`;
 
+function ParameterField({
+  p,
+  value,
+  onChange,
+}: {
+  p: MethodologyParameter;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const extra = EXTRAS[p.name];
+  const label = extra?.label ?? p.label;
+  const inRange = (n: number) => n >= p.min && n <= p.max;
+  const help = extra && <InfoTip label={label.toLowerCase()}>{extra.help}</InfoTip>;
+
+  if (extra?.choices) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <input type="hidden" name={`param.${p.name}`} value={value} />
+        <span className={`${labelClass} flex items-center gap-1.5`}>
+          {label}
+          {help}
+        </span>
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={label}>
+          {extra.choices
+            .filter((c) => inRange(c.value))
+            .map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                role="radio"
+                aria-checked={Number(value) === c.value}
+                onClick={() => onChange(String(c.value))}
+                className={choiceClass(Number(value) === c.value)}
+              >
+                <span className="block text-label font-semibold">{c.label}</span>
+                <span className="block font-mono text-micro opacity-80">≥ {c.value.toFixed(2)}</span>
+                <span className="mt-0.5 block text-micro opacity-80">{c.help}</span>
+              </button>
+            ))}
+        </div>
+      </div>
+    );
+  }
+
+  const id = `param-${p.name}`;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className={labelClass}>
+        <span className="flex items-center gap-1.5">
+          {label}
+          {help}
+        </span>
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        {extra?.presets?.filter(inRange).map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(String(n))}
+            className={`${choiceClass(Number(value) === n)} px-3 py-1.5 font-mono text-label`}
+          >
+            {n}
+            {extra.unit}
+          </button>
+        ))}
+        <div className="flex items-center gap-1">
+          <input
+            id={id}
+            name={`param.${p.name}`}
+            type="number"
+            min={p.min}
+            max={p.max}
+            step="any"
+            required
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className={`${inputClass} w-24 py-1.5`}
+          />
+          {extra?.unit && <span className="font-mono text-label text-muted-foreground">{extra.unit}</span>}
+        </div>
+      </div>
+      <p className="text-caption text-muted-foreground">
+        {extra?.note ?? `Between ${p.min} and ${p.max}. Default ${p.default}.`}
+      </p>
+    </div>
+  );
+}
+
 const RunSnapshotDialog = ({
   parcelId,
   parcelName,
@@ -122,9 +236,7 @@ const RunSnapshotDialog = ({
   const [dateStart, setDateStart] = useState(initial?.dateStart ?? range.start);
   const [dateEnd, setDateEnd] = useState(initial?.dateEnd ?? range.end);
   const [methodologyKey, setMethodologyKey] = useState(first ? `${first.slug}@${first.version}` : '');
-  const [cloudPct, setCloudPct] = useState(String(initial?.maxSceneCloudPct ?? first?.max_cloud_pct ?? 20));
-  const [threshold, setThreshold] = useState(initial?.cloudScoreThreshold ?? 0.6);
-  const [minClear, setMinClear] = useState(String(initial?.minClearPct ?? spec(first, 'min_clear_pct')?.default ?? 50));
+  const [values, setValues] = useState(() => defaultsFor(first, initial?.parameters));
   const [mode, setMode] = useState<'single' | 'series'>('single');
   const [windowMonths, setWindowMonths] = useState(1);
   const [intervalMonths, setIntervalMonths] = useState(3);
@@ -139,7 +251,7 @@ const RunSnapshotDialog = ({
   );
 
   const selected = methodologies.find((m) => `${m.slug}@${m.version}` === methodologyKey);
-  const minClearSpec = spec(selected, 'min_clear_pct');
+  const parameters = [...(selected?.parameters ?? [])].sort((a, b) => rank(a.name) - rank(b.name));
   const today = isoDay(new Date());
   const windows = mode === 'series' ? seriesWindows(dateStart, dateEnd, windowMonths, intervalMonths) : [];
   const tooMany = windows.length > MAX_WINDOWS;
@@ -170,7 +282,6 @@ const RunSnapshotDialog = ({
 
         <form action={formAction} className="flex min-h-0 flex-col">
           <input type="hidden" name="parcel_id" value={parcelId} />
-          <input type="hidden" name="param.cloud_score_threshold" value={threshold} />
           <input type="hidden" name="mode" value={mode} />
           <input type="hidden" name="window_months" value={windowMonths} />
           <input type="hidden" name="interval_months" value={intervalMonths} />
@@ -308,7 +419,10 @@ const RunSnapshotDialog = ({
                   id="methodology"
                   name="methodology"
                   value={methodologyKey}
-                  onChange={(e) => setMethodologyKey(e.target.value)}
+                  onChange={(e) => {
+                    setMethodologyKey(e.target.value);
+                    setValues(defaultsFor(methodologies.find((m) => `${m.slug}@${m.version}` === e.target.value)));
+                  }}
                   className={`${inputClass} appearance-none pr-9`}
                 >
                   {methodologies.map((m) => (
@@ -327,121 +441,25 @@ const RunSnapshotDialog = ({
               )}
             </div>
 
-            <fieldset className="flex flex-col gap-4 rounded-md border border-border p-4">
-              <legend className="flex items-center gap-1.5 px-1 text-label font-semibold">
-                <CloudSun className="size-4" />
-                Cloud settings
-              </legend>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="max_scene_cloud_pct" className={labelClass}>
-                  <span className="flex items-center gap-1.5">
-                    Max scene cloud cover
-                    <InfoTip label="max scene cloud cover">{HELP.cloud}</InfoTip>
-                  </span>
-                </label>
-                <div className="flex flex-wrap items-center gap-2">
-                  {CLOUD_PRESETS.map((pct) => (
-                    <button
-                      key={pct}
-                      type="button"
-                      onClick={() => setCloudPct(String(pct))}
-                      className={`${choiceClass(Number(cloudPct) === pct)} px-3 py-1.5 font-mono text-label`}
-                    >
-                      {pct}%
-                    </button>
-                  ))}
-                  <div className="flex items-center gap-1">
-                    <input
-                      id="max_scene_cloud_pct"
-                      name="param.max_scene_cloud_pct"
-                      type="number"
-                      min={1}
-                      max={100}
-                      step={1}
-                      required
-                      value={cloudPct}
-                      onChange={(e) => setCloudPct(e.target.value)}
-                      className={`${inputClass} w-20 py-1.5`}
-                    />
-                    <span className="font-mono text-label text-muted-foreground">%</span>
-                  </div>
-                </div>
-                <p className="text-caption text-muted-foreground">
-                  Skips whole scenes cloudier than this across their ~100 km tile. Clouds over the parcel
-                  are masked pixel by pixel anyway, so a higher limit often finds clear views in rainy
-                  seasons.
+            {parameters.length > 0 && (
+              <fieldset className="flex flex-col gap-4 rounded-md border border-border p-4">
+                <legend className="flex items-center gap-1.5 px-1 text-label font-semibold">
+                  <SlidersHorizontal className="size-4" />
+                  Settings
+                </legend>
+                {parameters.map((p) => (
+                  <ParameterField
+                    key={p.name}
+                    p={p}
+                    value={values[p.name] ?? ''}
+                    onChange={(v) => setValues((prev) => ({ ...prev, [p.name]: v }))}
+                  />
+                ))}
+                <p className="font-mono text-micro text-muted-foreground">
+                  These settings are saved with the snapshot and sealed into its record hash.
                 </p>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className={`${labelClass} flex items-center gap-1.5`}>
-                  Clear-pixel mask
-                  <InfoTip label="the clear-pixel mask">{HELP.mask}</InfoTip>
-                </span>
-                <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Clear-pixel mask">
-                  {MASKS.map((mask) => (
-                    <button
-                      key={mask.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={threshold === mask.value}
-                      onClick={() => setThreshold(mask.value)}
-                      className={choiceClass(threshold === mask.value)}
-                    >
-                      <span className="block text-label font-semibold">{mask.label}</span>
-                      <span className="block font-mono text-micro opacity-80">≥ {mask.value.toFixed(2)}</span>
-                      <span className="mt-0.5 block text-micro opacity-80">{mask.help}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {minClearSpec && (
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="min_clear_pct" className={labelClass}>
-                    <span className="flex items-center gap-1.5">
-                      Minimum clear pixels
-                      <InfoTip label="minimum clear pixels">{HELP.minClear}</InfoTip>
-                    </span>
-                  </label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {MIN_CLEAR_PRESETS.map((pct) => (
-                      <button
-                        key={pct}
-                        type="button"
-                        onClick={() => setMinClear(String(pct))}
-                        className={`${choiceClass(Number(minClear) === pct)} px-3 py-1.5 font-mono text-label`}
-                      >
-                        {pct}%
-                      </button>
-                    ))}
-                    <div className="flex items-center gap-1">
-                      <input
-                        id="min_clear_pct"
-                        name="param.min_clear_pct"
-                        type="number"
-                        min={minClearSpec.min}
-                        max={minClearSpec.max}
-                        step={1}
-                        required
-                        value={minClear}
-                        onChange={(e) => setMinClear(e.target.value)}
-                        className={`${inputClass} w-20 py-1.5`}
-                      />
-                      <span className="font-mono text-label text-muted-foreground">%</span>
-                    </div>
-                  </div>
-                  <p className="text-caption text-muted-foreground">
-                    Below this, the snapshot is still sealed but flagged low coverage. It never fails for it.
-                  </p>
-                </div>
-              )}
-
-              <p className="font-mono text-micro text-muted-foreground">
-                These settings are saved with the snapshot and sealed into its record hash.
-              </p>
-            </fieldset>
+              </fieldset>
+            )}
 
             <div className="flex gap-3 rounded-md bg-surface-container p-4">
               <Lock className="size-4 shrink-0 text-olive" />
