@@ -18,6 +18,10 @@ func New(a *app.App) http.Handler {
 
 	root := http.NewServeMux()
 	registerAuth(root, a)
+	// For the host's health check; it doesn't touch the database.
+	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("ok"))
+	})
 	root.Handle("/", a.Auth.Authenticate(protected))
 
 	// Recover wraps Logger so a panic anywhere, even in Logger, becomes a 500. RequestID goes
