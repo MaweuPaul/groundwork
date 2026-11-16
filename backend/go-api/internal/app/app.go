@@ -16,6 +16,7 @@ type App struct {
 	Users     *handler.AuthHandler
 	Parcels   *handler.ParcelHandler
 	Snapshots *handler.SnapshotHandler
+	Activity  *handler.ActivityHandler
 }
 
 // New wires repositories into services, and services into handlers.
@@ -38,10 +39,13 @@ func New(cfg *config.Config, db *gorm.DB) *App {
 	methodologyRepo := repository.NewMethodologyRepository(db)
 	snapshotSvc := service.NewSnapshotService(snapshotRepo, methodologyRepo)
 
+	activitySvc := service.NewActivityService(repository.NewActivityRepository(db))
+
 	return &App{
 		Auth:      middleware.NewAuthMiddleware(tokenSvc, userRepo),
 		Users:     handler.NewAuthHandler(authSvc),
 		Parcels:   handler.NewParcelHandler(parcelSvc, refSvc),
 		Snapshots: handler.NewSnapshotHandler(snapshotSvc, refSvc),
+		Activity:  handler.NewActivityHandler(activitySvc),
 	}
 }
