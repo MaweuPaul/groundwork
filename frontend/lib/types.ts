@@ -122,9 +122,8 @@ export type NewSnapshot = {
   methodology_version: string;
   date_start: string;
   date_end: string;
-  // Omitted means the methodology's default; both are sealed into the record.
-  max_scene_cloud_pct?: number;
-  cloud_score_threshold?: number;
+  // Any the methodology takes but this leaves out get their defaults; all are sealed into the record.
+  parameters?: Record<string, number>;
 };
 
 export type QueuedSnapshot = {
@@ -190,4 +189,15 @@ export type Methodology = {
   composite_method: string;
   date_lookback_days: number;
   created_at: string;
+  parameters: MethodologyParameter[];
+};
+
+// A setting a methodology accepts. The API rejects values outside min to max.
+export type MethodologyParameter = {
+  name: string;
+  label: string;
+  type: string;
+  min: number;
+  max: number;
+  default: number;
 };

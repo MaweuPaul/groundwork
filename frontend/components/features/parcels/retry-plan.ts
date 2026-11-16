@@ -3,7 +3,7 @@ import type { SnapshotSummary } from '@/lib/types';
 
 type RetrySource = Pick<
   SnapshotSummary,
-  'date_start' | 'date_end' | 'max_scene_cloud_pct' | 'cloud_score_threshold' | 'failure_message'
+  'date_start' | 'date_end' | 'max_scene_cloud_pct' | 'cloud_score_threshold' | 'parameters' | 'failure_message'
 >;
 
 // failure_message is "CODE: reason".
@@ -39,6 +39,7 @@ export function retryPlan(s: RetrySource): { initial: SnapshotOptions; note: str
     dateEnd: s.date_end,
     maxSceneCloudPct: s.max_scene_cloud_pct,
     cloudScoreThreshold: s.cloud_score_threshold,
+    minClearPct: s.parameters?.min_clear_pct,
   };
   const code = failureCode(s.failure_message);
   if (code === 'COMPUTATION_TOO_LARGE') {
