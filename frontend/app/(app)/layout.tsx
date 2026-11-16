@@ -1,5 +1,6 @@
 import { AppSidebar } from '@/components/shared/app-sidebar';
 import Header from '@/components/shared/header';
+import SnapshotNotifier from '@/components/shared/snapshot-notifier';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { getMe } from '@/lib/api';
 
@@ -16,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Header />
         {children}
       </SidebarInset>
+      {me.data.role === 'asset_holder' && <SnapshotNotifier />}
     </SidebarProvider>
   );
 }

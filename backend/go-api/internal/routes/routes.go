@@ -14,6 +14,7 @@ func New(a *app.App) http.Handler {
 	registerUsers(protected, a)
 	registerParcels(protected, a)
 	registerSnapshots(protected, a)
+	registerActivity(protected, a)
 
 	root := http.NewServeMux()
 	registerAuth(root, a)
