@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { retryPlan } from '@/components/features/parcels/retry-plan';
 import RunSnapshotDialog from '@/components/features/parcels/run-snapshot-dialog';
 import Border from '@/components/shared/border';
+import ClickableRow from '@/components/shared/clickable-row';
 import CopyButton from '@/components/shared/copy-button';
 import StatusBadge from '@/components/shared/status-badge';
 import { formatDate, formatNdvi } from '@/lib/format';
@@ -68,7 +69,7 @@ const SnapshotHistory = ({
             </thead>
             <tbody className="divide-y divide-border">
               {snapshots.map((s) => (
-                <tr key={s.id} className="transition-colors hover:bg-surface-low">
+                <ClickableRow key={s.id} href={snapshotPath(s)} className="transition-colors hover:bg-surface-low">
                   <td className="px-5 py-4 font-mono text-caption whitespace-nowrap">
                     {s.date_start} → {s.date_end}
                   </td>
@@ -130,7 +131,7 @@ const SnapshotHistory = ({
                       Details <ArrowRight className="size-3.5" />
                     </Link>
                   </td>
-                </tr>
+                </ClickableRow>
               ))}
             </tbody>
           </table>
