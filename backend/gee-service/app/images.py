@@ -1,30 +1,30 @@
-"""Which completed snapshots still need an NDVI map image, and saving it (migration 010)."""
+"""Which completed snapshots still need a map image, and saving it (migration 010)."""
 
 import psycopg
 from psycopg.rows import class_row
 from psycopg.types.json import Jsonb
 
-from app.render import ImageRequest, Rendered
+from app.contract import ImageRequest, Rendered
 
 
-def next_missing(conn: psycopg.Connection) -> ImageRequest | None:
-    """The oldest completed snapshot with no image row, or None. Two workers may pick the
-    same one; the primary key keeps only the first image."""
+def next_missing(conn: psycopg.Connection, slugs: list[str]) -> ImageRequest | None:
+    """The oldest completed snapshot of these methodologies with no image row, or None. Two
+    workers may pick the same one; the primary key keeps only the first image."""
     with conn.cursor(row_factory=class_row(ImageRequest)) as cur:
         cur.execute(
             """
             SELECT s.id AS snapshot_id, m.slug AS methodology_slug,
                    ST_AsGeoJSON(s.parcel_geometry) AS geometry_geojson,
-                   s.date_start, s.date_end,
-                   s.max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
-                   s.cloud_score_threshold::float8 AS cloud_score_threshold
+                   s.date_start, s.date_end, s.parameters
             FROM snapshots s
             JOIN methodologies m ON m.id = s.methodology_id
             WHERE s.status = 'completed'
+              AND m.slug = ANY(%s::text[])
               AND NOT EXISTS (SELECT 1 FROM snapshot_ndvi_images i WHERE i.snapshot_id = s.id)
             ORDER BY s.completed_at
             LIMIT 1
-            """
+            """,
+            (slugs,),
         )
         return cur.fetchone()
 

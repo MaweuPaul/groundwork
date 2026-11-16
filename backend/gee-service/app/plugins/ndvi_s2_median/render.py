@@ -11,13 +11,11 @@ an extra Earth Engine role.
 import json
 import math
 import struct
-from dataclasses import dataclass
-from datetime import date
-from uuid import UUID
 
 import ee
 
-from app.compute import SCALE_M, build_composite
+from app.contract import Bounds, ImageRequest, Rendered
+from app.plugins.ndvi_s2_median.compute import SCALE_M, build_composite, setting
 
 # Sequential, light to dark: bare ground pale, dense vegetation dark. Lightness alone carries
 # the order, so it reads without colour vision and in greyscale.
@@ -27,34 +25,6 @@ NDVI_MAX = 0.9
 MAX_DIMENSION = 1024
 MIN_DIMENSION = 256
 EARTH_RADIUS_M = 6_378_137
-
-
-@dataclass(frozen=True)
-class ImageRequest:
-    snapshot_id: UUID
-    methodology_slug: str
-    geometry_geojson: str
-    date_start: date
-    date_end: date
-    max_scene_cloud_pct: float
-    cloud_score_threshold: float
-
-
-@dataclass(frozen=True)
-class Bounds:
-    west: float
-    south: float
-    east: float
-    north: float
-
-
-@dataclass(frozen=True)
-class Rendered:
-    png: bytes
-    width: int
-    height: int
-    bounds: Bounds
-    visualization: dict
 
 
 def bounds_of(geojson: str) -> Bounds:
@@ -116,7 +86,11 @@ def png_size(png: bytes) -> tuple[int, int]:
 def render(req: ImageRequest) -> Rendered:
     geometry = ee.Geometry(json.loads(req.geometry_geojson))
     _, composite = build_composite(
-        geometry, req.date_start, req.date_end, req.max_scene_cloud_pct, req.cloud_score_threshold
+        geometry,
+        req.date_start,
+        req.date_end,
+        setting(req.parameters, "max_scene_cloud_pct"),
+        setting(req.parameters, "cloud_score_threshold"),
     )
 
     b = bounds_of(req.geometry_geojson)

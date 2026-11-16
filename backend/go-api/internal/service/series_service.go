@@ -64,19 +64,18 @@ func (s *snapshotService) CreateSeries(in CreateSeriesInput) (repository.SeriesR
 	if m == nil {
 		return repository.SeriesRef{}, ErrUnknownMethodology
 	}
-	cloudPct, threshold, err := cloudOptions(in.CreateSnapshotInput, m.MaxCloudPct)
+	params, err := s.resolveParameters(m.ID, in.Parameters)
 	if err != nil {
 		return repository.SeriesRef{}, err
 	}
 
 	return s.snapshots.CreateSeriesWithJobs(repository.NewSeries{
 		Template: repository.NewSnapshot{
-			ParcelID:            in.ParcelID,
-			OwnerID:             in.OwnerID,
-			MethodologyID:       m.ID,
-			MethodologyVersion:  m.Version,
-			MaxSceneCloudPct:    cloudPct,
-			CloudScoreThreshold: threshold,
+			ParcelID:           in.ParcelID,
+			OwnerID:            in.OwnerID,
+			MethodologyID:      m.ID,
+			MethodologyVersion: m.Version,
+			Parameters:         params,
 		},
 		DateStart:      start,
 		DateEnd:        end,

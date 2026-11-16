@@ -25,14 +25,16 @@ type SeriesRef struct {
 
 // SeriesSummary is one series with its progress and, once every window finished, its seal.
 type SeriesSummary struct {
-	ID                  uuid.UUID  `json:"id"`
-	ShortID             string     `json:"short_id"`
-	DateStart           string     `json:"date_start"`
-	DateEnd             string     `json:"date_end"`
-	WindowMonths        int        `json:"window_months"`
-	IntervalMonths      int        `json:"interval_months"`
-	MaxSceneCloudPct    float64    `json:"max_scene_cloud_pct"`
-	CloudScoreThreshold float64    `json:"cloud_score_threshold"`
+	ID             uuid.UUID  `json:"id"`
+	ShortID        string     `json:"short_id"`
+	DateStart      string     `json:"date_start"`
+	DateEnd        string     `json:"date_end"`
+	WindowMonths   int        `json:"window_months"`
+	IntervalMonths int        `json:"interval_months"`
+	Parameters     Parameters `json:"parameters"`
+	// Deprecated: read parameters. Null for methodologies without these settings.
+	MaxSceneCloudPct    *float64   `json:"max_scene_cloud_pct"`
+	CloudScoreThreshold *float64   `json:"cloud_score_threshold"`
 	Windows             int        `json:"windows"`
 	Completed           int        `json:"completed"`
 	Failed              int        `json:"failed"`
@@ -49,14 +51,14 @@ func (r *snapshotRepository) CreateSeriesWithJobs(in NewSeries) (SeriesRef, erro
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		res := tx.Raw(`
 			INSERT INTO snapshot_series (parcel_id, methodology_id, methodology_version, date_start, date_end,
-			                             window_months, interval_months, max_scene_cloud_pct, cloud_score_threshold)
-			SELECT p.id, ?, ?, ?::date, ?::date, ?, ?, ?, ?
+			                             window_months, interval_months, parameters)
+			SELECT p.id, ?, ?, ?::date, ?::date, ?, ?, ?::jsonb
 			FROM parcels p
 			WHERE p.id = ? AND p.owner_id = ?
 			RETURNING id, short_id`,
 			t.MethodologyID, t.MethodologyVersion,
 			in.DateStart.Format(time.DateOnly), in.DateEnd.Format(time.DateOnly),
-			in.WindowMonths, in.IntervalMonths, t.MaxSceneCloudPct, t.CloudScoreThreshold,
+			in.WindowMonths, in.IntervalMonths, t.Parameters,
 			t.ParcelID, t.OwnerID,
 		).Scan(&ref)
 		if res.Error != nil {
@@ -95,7 +97,9 @@ func (r *snapshotRepository) ListSeriesByParcelForOwner(parcelID, ownerID uuid.U
 		SELECT r.id, r.short_id,
 		       to_char(r.date_start, 'YYYY-MM-DD') AS date_start,
 		       to_char(r.date_end, 'YYYY-MM-DD') AS date_end,
-		       r.window_months, r.interval_months, r.max_scene_cloud_pct, r.cloud_score_threshold,
+		       r.window_months, r.interval_months, r.parameters,
+		       r.max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
+		       r.cloud_score_threshold::float8 AS cloud_score_threshold,
 		       count(s.id) AS windows,
 		       count(s.id) FILTER (WHERE s.status = 'completed') AS completed,
 		       count(s.id) FILTER (WHERE s.status = 'failed') AS failed,

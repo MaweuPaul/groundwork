@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 from uuid import UUID
 
 
@@ -14,9 +15,8 @@ class Job:
     methodology_version: str
     date_start: date
     date_end: date
-    # Chosen per snapshot (defaults come from the API) and sealed into its record.
-    max_scene_cloud_pct: float
-    cloud_score_threshold: float
+    # The methodology's parameters for this snapshot, defaults filled in; sealed into its record.
+    parameters: dict[str, Any]
     geometry_geojson: str
 
 

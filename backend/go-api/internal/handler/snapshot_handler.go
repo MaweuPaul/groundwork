@@ -2,10 +2,10 @@ package handler
 
 import (
 	"errors"
-	"log"
 	"net/http"
 
 	"groundwork/internal/httpx"
+	"groundwork/internal/logging"
 	"groundwork/internal/middleware"
 	"groundwork/internal/repository"
 	"groundwork/internal/service"
@@ -25,9 +25,28 @@ type createSnapshotRequest struct {
 	MethodologyVersion string `json:"methodology_version"`
 	DateStart          string `json:"date_start"`
 	DateEnd            string `json:"date_end"`
-	// Optional; omitted means the methodology's default.
+	// Optional; a parameter left out gets the methodology's default.
+	Parameters map[string]float64 `json:"parameters"`
+	// Deprecated: send them in parameters. Used when parameters doesn't set them.
 	MaxSceneCloudPct    *float64 `json:"max_scene_cloud_pct"`
 	CloudScoreThreshold *float64 `json:"cloud_score_threshold"`
+}
+
+func (req createSnapshotRequest) parameters() map[string]float64 {
+	params := make(map[string]float64, len(req.Parameters)+2)
+	for name, value := range req.Parameters {
+		params[name] = value
+	}
+	legacy := map[string]*float64{
+		"max_scene_cloud_pct":   req.MaxSceneCloudPct,
+		"cloud_score_threshold": req.CloudScoreThreshold,
+	}
+	for name, value := range legacy {
+		if _, set := params[name]; !set && value != nil {
+			params[name] = *value
+		}
+	}
+	return params
 }
 
 // Create queues a snapshot of one of the caller's parcels ({id} is its UUID or short ID) and answers 202 at once;
@@ -46,14 +65,13 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	user := middleware.UserFrom(r.Context())
 	id, err := h.service.CreateSnapshot(service.CreateSnapshotInput{
-		ParcelID:            parcelID,
-		OwnerID:             user.ID,
-		Methodology:         req.Methodology,
-		MethodologyVersion:  req.MethodologyVersion,
-		DateStart:           req.DateStart,
-		DateEnd:             req.DateEnd,
-		MaxSceneCloudPct:    req.MaxSceneCloudPct,
-		CloudScoreThreshold: req.CloudScoreThreshold,
+		ParcelID:           parcelID,
+		OwnerID:            user.ID,
+		Methodology:        req.Methodology,
+		MethodologyVersion: req.MethodologyVersion,
+		DateStart:          req.DateStart,
+		DateEnd:            req.DateEnd,
+		Parameters:         req.parameters(),
 	})
 
 	var invalid *service.ValidationError
@@ -68,7 +86,7 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
 		return
 	case err != nil:
-		log.Printf("snapshots: create: %v", err)
+		logging.From(r.Context()).Error("snapshots: create", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -90,7 +108,7 @@ func (h *SnapshotHandler) Get(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFrom(r.Context())
 	snapshot, err := h.service.GetSnapshot(id, user.ID)
 	if err != nil {
-		log.Printf("snapshots: get: %v", err)
+		logging.From(r.Context()).Error("snapshots: get", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -113,7 +131,7 @@ func (h *SnapshotHandler) NdviImage(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFrom(r.Context())
 	png, err := h.service.GetNdviImage(id, user.ID)
 	if err != nil {
-		log.Printf("snapshots: ndvi image: %v", err)
+		logging.From(r.Context()).Error("snapshots: ndvi image", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -151,14 +169,13 @@ func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFrom(r.Context())
 	ref, err := h.service.CreateSeries(service.CreateSeriesInput{
 		CreateSnapshotInput: service.CreateSnapshotInput{
-			ParcelID:            parcelID,
-			OwnerID:             user.ID,
-			Methodology:         req.Methodology,
-			MethodologyVersion:  req.MethodologyVersion,
-			DateStart:           req.DateStart,
-			DateEnd:             req.DateEnd,
-			MaxSceneCloudPct:    req.MaxSceneCloudPct,
-			CloudScoreThreshold: req.CloudScoreThreshold,
+			ParcelID:           parcelID,
+			OwnerID:            user.ID,
+			Methodology:        req.Methodology,
+			MethodologyVersion: req.MethodologyVersion,
+			DateStart:          req.DateStart,
+			DateEnd:            req.DateEnd,
+			Parameters:         req.parameters(),
 		},
 		WindowMonths:   req.WindowMonths,
 		IntervalMonths: req.IntervalMonths,
@@ -173,7 +190,7 @@ func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
 	case errors.As(err, &invalid):
 		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
 	case err != nil:
-		log.Printf("snapshots: create series: %v", err)
+		logging.From(r.Context()).Error("snapshots: create series", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 	default:
 		httpx.WriteJSON(w, http.StatusAccepted, ref)
@@ -194,7 +211,7 @@ func (h *SnapshotHandler) ListSeriesForParcel(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err != nil {
-		log.Printf("snapshots: list series: %v", err)
+		logging.From(r.Context()).Error("snapshots: list series", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -216,7 +233,7 @@ func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err != nil {
-		log.Printf("snapshots: list for parcel: %v", err)
+		logging.From(r.Context()).Error("snapshots: list for parcel", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
@@ -227,7 +244,7 @@ func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) 
 func (h *SnapshotHandler) ListMethodologies(w http.ResponseWriter, r *http.Request) {
 	methodologies, err := h.service.ListMethodologies()
 	if err != nil {
-		log.Printf("methodologies: list: %v", err)
+		logging.From(r.Context()).Error("methodologies: list", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}

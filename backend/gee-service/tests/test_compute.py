@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.compute import check_supported, end_exclusive, summarize
+from app.plugins.ndvi_s2_median.compute import check_supported, end_exclusive, summarize
 from app.errors import JobError
 from app.models import Job, Methodology
 
@@ -27,12 +27,11 @@ JOB = Job(
     methodology_version="1.0.0",
     date_start=date(2025, 4, 1),
     date_end=date(2025, 4, 30),
-    max_scene_cloud_pct=60.0,
-    cloud_score_threshold=0.6,
+    parameters={"max_scene_cloud_pct": 60.0, "cloud_score_threshold": 0.6, "min_clear_pct": 50},
     geometry_geojson="{}",
 )
 
-SCENE = ["20250412T073619_20250412T074502_T37MBU", 1744443379000, 1.4, "Sentinel-2B", "S2B_MSIL2A_20250412"]
+SCENE = ["20250412T073619_20250412T074502_T37MBU", 1744443379000, 1.4, "Sentinel-2B", "S2B_MSIL2A_20250412", 1744460000123456]
 
 
 def info(**overrides):
@@ -54,10 +53,28 @@ def test_summarize_builds_measurements_and_scenes():
     assert result.measurements["valid_pixel_pct"].metadata["cloud_score_plus_threshold"] == 0.6
 
     (scene,) = result.scenes
+    assert scene.provider == "Copernicus Sentinel-2 via Google Earth Engine"
+    assert scene.processing_level == "L2A"
+    assert scene.asset_uri == f"COPERNICUS/S2_SR_HARMONIZED/{scene.scene_id}"
     assert scene.scene_id == SCENE[0]
     assert scene.satellite == "sentinel-2b"
     assert scene.acquisition_time == datetime(2025, 4, 12, 7, 36, 19, tzinfo=timezone.utc)
     assert scene.cloud_cover_pct == 1.4
+    assert scene.source_version == "1744460000123456"
+    assert result.flags == {}
+
+
+def test_low_coverage_is_flagged_not_failed():
+    result = summarize(info(stats={"ndvi_mean": 0.5, "ndvi_max": 0.6, "ndvi_count": 420}), JOB)
+    assert result.measurements["valid_pixel_pct"].value == pytest.approx(42.0)
+    assert list(result.flags) == ["low_coverage"]
+    assert "42.0%" in result.flags["low_coverage"]
+
+
+def test_snapshot_from_before_min_clear_pct_uses_the_manifest_default():
+    older = replace(JOB, parameters={"max_scene_cloud_pct": 60.0, "cloud_score_threshold": 0.6})
+    result = summarize(info(stats={"ndvi_mean": 0.5, "ndvi_max": 0.6, "ndvi_count": 420}), older)
+    assert "low_coverage" in result.flags
 
 
 def test_no_scenes_is_a_terminal_error():

@@ -1,12 +1,12 @@
 package handler
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/google/uuid"
 
 	"groundwork/internal/httpx"
+	"groundwork/internal/logging"
 )
 
 // resolveRef turns the URL's {id} (a UUID or a short ID) into a UUID. When it names
@@ -15,7 +15,7 @@ func resolveRef(w http.ResponseWriter, r *http.Request, resolve func(string) (uu
 	ref := r.PathValue("id")
 	id, found, err := resolve(ref)
 	if err != nil {
-		log.Printf("resolve %q: %v", ref, err)
+		logging.From(r.Context()).Error("resolve ref", "ref", ref, "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return uuid.Nil, false
 	}

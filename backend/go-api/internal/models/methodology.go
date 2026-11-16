@@ -21,4 +21,16 @@ type Methodology struct {
 	CompositeMethod  string         `gorm:"type:text;not null" json:"composite_method"`
 	DateLookbackDays int            `gorm:"type:integer;not null" json:"date_lookback_days"`
 	CreatedAt        time.Time      `gorm:"type:timestamptz;not null;default:now()" json:"created_at"`
+	// From methodology_parameters; filled by the repository's List.
+	Parameters []MethodologyParameter `gorm:"-" json:"parameters"`
+}
+
+// MethodologyParameter is one setting a methodology accepts, with its range and default.
+type MethodologyParameter struct {
+	Name    string  `json:"name"`
+	Label   string  `json:"label"`
+	Type    string  `json:"type"`
+	Min     float64 `gorm:"column:min_value" json:"min"`
+	Max     float64 `gorm:"column:max_value" json:"max"`
+	Default float64 `gorm:"column:default_value" json:"default"`
 }

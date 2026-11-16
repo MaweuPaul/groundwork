@@ -97,15 +97,15 @@ Geometry is always returned as a GeoJSON `MultiPolygon`.
 
 ## Snapshots
 
-- `POST /parcels/{id}/snapshots` (`asset_holder`, own parcels only): `methodology` (slug), `methodology_version` (required; never defaults to the latest), `date_start`, `date_end` (`YYYY-MM-DD`), optional `max_scene_cloud_pct` (above 0, up to 100; defaults to the methodology's value) and `cloud_score_threshold` (0.40–0.80; defaults to 0.60). Both are sealed into the record. Returns **202** with `{"id", "status": "pending"}` and a `Location: /snapshots/{id}` header; the Python worker computes it in the background.
+- `POST /parcels/{id}/snapshots` (`asset_holder`, own parcels only): `methodology` (slug), `methodology_version` (required; never defaults to the latest), `date_start`, `date_end` (`YYYY-MM-DD`), and optional `parameters`, e.g. `{"min_clear_pct": 40}`. Each methodology lists its parameters with their ranges and defaults on `GET /methodologies`; any left out get their default, and the full set is sealed into the record. For NDVI these are `max_scene_cloud_pct` (0.01–100, default 20), `cloud_score_threshold` (0.40–0.80, default 0.60) and `min_clear_pct` (0–100, default 50). The older top-level `max_scene_cloud_pct` and `cloud_score_threshold` fields still work when `parameters` doesn't set them. Returns **202** with `{"id", "status": "pending"}` and a `Location: /snapshots/{id}` header; the Python worker computes it in the background.
   - In one transaction, the snapshot copies the parcel's current geometry, stores a `geometry_hash` of a normalised copy (coordinates snapped to ~1 cm, points in a standard order, so the same boundary always hashes the same), and queues its job.
-  - 400 if a date is malformed, `date_end` is before `date_start` or in the future, `date_start` is before 2015-06-23 (first Sentinel-2 imagery), the range is longer than a year, or the methodology version doesn't exist. 404 if the parcel doesn't exist or isn't yours.
-- `GET /parcels/{id}/snapshots`: the parcel's snapshot history, newest first, with each snapshot's measurements and `record_hash`. 404 if the parcel doesn't exist or isn't yours.
+  - 400 if a date is malformed, `date_end` is before `date_start` or in the future, `date_start` is before 2015-06-23 (first Sentinel-2 imagery), the range is longer than a year, the methodology version doesn't exist, or a parameter is unknown or out of range. 404 if the parcel doesn't exist or isn't yours.
+- `GET /parcels/{id}/snapshots`: the parcel's snapshot history, newest first, with each snapshot's `parameters`, `flags`, measurements and `record_hash`. 404 if the parcel doesn't exist or isn't yours.
 - `POST /parcels/{id}/series` (`asset_holder`): a time series. The same fields, where the dates are the whole range, plus `window_months` and `interval_months` (1–12). Creates one snapshot per window in one transaction (at most 24; a last window that overruns is cut short at `date_end`). Returns **202** with `{"id", "short_id", "windows"}`.
 - `GET /parcels/{id}/series`: the parcel's series with progress and, once every window has finished, `record_hash` and `sealed_at`.
 - `GET /snapshots/{id}/ndvi.png`: the NDVI map image of a completed snapshot. `ndvi_image` on snapshot responses gives its bounds and colour scale. 404 if there is none yet or it isn't yours.
-- `GET /methodologies`: the methodologies a snapshot can be requested with.
-- `GET /snapshots/{id}`: one snapshot of your own. Poll it after creating a snapshot until `status` is `completed` or `failed`. Returns the status (and `failure_message`), inputs (methodology, dates, `geometry_hash`), timings, `measurements` as a `{type: value}` map, `imagery_sources` (scene, satellite, acquisition time, cloud %), and once completed, `chain_seq`, `record_hash` and `prev_record_hash`. `job` shows queue progress: attempts, `next_attempt_at` while waiting to retry, and the last error code (the worker's raw message stays internal). The frozen geometry is not included. 404 if it doesn't exist or isn't yours.
+- `GET /methodologies`: the methodologies a snapshot can be requested with, each with its `parameters` (name, label, type, min, max, default).
+- `GET /snapshots/{id}`: one snapshot of your own. Poll it after creating a snapshot until `status` is `completed` or `failed`. Returns the status (and `failure_message`), inputs (methodology, dates, `parameters`, `geometry_hash`), quality `flags` (e.g. `low_coverage`, which doesn't fail the snapshot), timings, `measurements` as a `{type: value}` map, `imagery_sources` (scene, satellite, acquisition time, cloud %), and once completed, `chain_seq`, `record_hash` and `prev_record_hash`. `job` shows queue progress: attempts, `next_attempt_at` while waiting to retry, and the last error code (the worker's raw message stays internal). The frozen geometry is not included. 404 if it doesn't exist or isn't yours.
 
 ## Prerequisites
 
@@ -179,7 +179,7 @@ How snapshots run today. The proposal for adding more analyses is under [Propose
 1. **Snapshots are evidence, not cache.** A completed snapshot is never recomputed or overwritten. A better method means a new methodology version and new snapshots.
 2. **A methodology is a versioned spec.** A methodology row is immutable; the worker's registry maps its slug to the code that computes it.
 3. **The database is the only link between the services.** Go requests work and serves results; Python does all calculations. Neither calls the other.
-4. **Everything needed to reproduce a result is stored with it**: inputs, cloud settings, methodology version and the exact scene IDs. Dataset versions are not stored yet (see the proposal).
+4. **Everything needed to reproduce a result is stored with it**: inputs, parameters, methodology version, and every source with the version the provider reported when it was read (Earth Engine's `system:version`). The code version and a manifest hash are not stored yet (see the proposal).
 5. **The schema is the contract.** Schema changes go through `backend/go-api/migrations` only, in backward-compatible steps (add, update both services, then remove).
 
 ### Flow
@@ -192,8 +192,8 @@ Frontend ──▶ Go API: POST /parcels/{id}/snapshots
 
 Python worker ──▶ LISTEN snapshot_jobs (plus a 30–60 s poll as a fallback)
                ├─ claims job (FOR UPDATE SKIP LOCKED); snapshot → processing
-               ├─ computes with Google Earth Engine (methodology looked up in app/registry.py)
-               └─ one transaction: INSERT measurements + imagery sources,
+               ├─ computes with Google Earth Engine (the methodology's plugin, found by app/registry.py)
+               └─ one transaction: INSERT measurements, sources and flags,
                   snapshot → completed (record_hash set by a Postgres function)
                   or failed with a reason, or job retried with backoff
                └─ when idle: renders the NDVI map image of completed snapshots
@@ -209,13 +209,13 @@ The job queue lives in Postgres, so there is no extra infrastructure, and a snap
 
 ### Integrity: hash chain
 
-When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its inputs and outputs in a fixed order (snapshot and parcel IDs, methodology and version, cloud settings, dates, geometry hashes, completion time, sorted measurements, sorted scene IDs). The hash also includes the **previous** snapshot's hash (`prev_record_hash`), forming a chain like git commits.
+When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its inputs and outputs in a fixed order (snapshot and parcel IDs, methodology and version, sorted parameters, dates, geometry hashes, completion time, sorted measurements, sorted sources with their versions, sorted quality flags). The hash also includes the **previous** snapshot's hash (`prev_record_hash`), forming a chain like git commits.
 
 - The hash is computed by a Postgres function when a snapshot becomes `completed`, so there is one implementation, independent of which service wrote the row. Verification uses the same function.
 - The full data is still stored. The hash adds tamper evidence, not compression.
 - Changing any stored value no longer matches its hash, and breaks every hash after it.
 - `verify_snapshot_chain()` recomputes the chain and reports every record that does not match. There is no API endpoint for it yet.
-- Records keep the format they were sealed with (`record_format`), so old hashes still verify when the format changes. New records use format v2.
+- Records keep the format they were sealed with (`record_format`), so old hashes still verify when the format changes. New records use format v3 (parameters, source versions and flags); series use series format v2.
 - **Series:** each window is sealed as its own snapshot. When the last window finishes, a trigger seals the series with one hash over its settings and every window's result in date order, so a window can't be dropped later. Series hashes are stored on the series, not in the snapshot chain.
 - The NDVI map image is a picture of the evidence and is not part of the hash.
 - Optional later step: publish the latest chain hash externally (e.g. OpenTimestamps) to prove the history existed at a point in time. No blockchain or Web3 is required.
@@ -230,6 +230,8 @@ When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its
 | ✅ `snapshots.max_scene_cloud_pct`, `cloud_score_threshold`, `record_format` | Per-snapshot cloud settings, sealed from format v2 (migration 009) |
 | ✅ `snapshot_ndvi_images` | NDVI map images, outside the hash (migration 010) |
 | ✅ `snapshot_series`, `snapshots.series_id` | Time series and their seal (migration 011) |
+| ✅ `methodology_parameters` | Each methodology's parameters, ranges and defaults; insert-only (migration 012) |
+| ✅ `snapshots.parameters`, `imagery_sources.source_version`, `snapshot_flags`; record format v3 | Generic parameters replace the cloud columns in the record; source versions and quality flags are sealed (migration 013) |
 | `parcel_access` | Sharing parcels with auditors |
 | `snapshots.requested_by`, `input_hash` | Who ran it; same request returns the existing completed snapshot |
 | `audit_events` | Append-only log of who did what and when |
@@ -241,32 +243,32 @@ There is no HTTP API between the services. The contract is which tables each one
 | | Go API | Python worker (`gee_worker` role) |
 |---|---|---|
 | `users`, `parcels`, `parcel_access` | read / write | no access |
-| `methodologies`, `measurement_types` | read / write | read |
+| `methodologies`, `methodology_parameters`, `measurement_types` | read / write | read |
 | `snapshots` | insert (pending), read | read; changed only through the queue functions |
 | `snapshot_jobs` | insert (with the snapshot, same transaction) | read; changed only through the queue functions |
-| `measurements`, `imagery_sources`, `snapshot_ndvi_images` | read | read, insert |
+| `measurements`, `imagery_sources`, `snapshot_flags`, `snapshot_ndvi_images` | read | read, insert |
 | `snapshot_series` | insert, read | no direct access; sealed by a trigger |
 
 The worker has no direct `UPDATE` rights. It drives jobs through four functions, each of which checks that it still holds the job's lock:
 
 | Function | Does |
 |---|---|
-| `claim_snapshot_job(worker, lock_for)` | Claims the next due job (or one abandoned by a dead worker) and returns its inputs: job and snapshot IDs, attempt, methodology, dates, cloud settings, GeoJSON geometry. No row means nothing to do. |
+| `claim_snapshot_job(worker, lock_for)` | Claims the next due job (or one abandoned by a dead worker) and returns its inputs: job and snapshot IDs, attempt, methodology, dates, parameters, GeoJSON geometry. No row means nothing to do. |
 | `extend_snapshot_job_lock(job, worker, lock_for)` | Heartbeat during long computations. |
 | `complete_snapshot_job(job, worker)` | Called last, in the transaction that inserted the results. Completes the snapshot (the hash trigger stamps it) and returns `record_hash`. |
 | `fail_snapshot_job(job, worker, code, message, retryable)` | Retryable: re-queued with backoff (1, 2, 4… minutes, at most 1 hour) until `max_attempts`. Otherwise the job and snapshot fail with the code and message. |
 
 `worker` must be unique per running process. A worker whose lock expired and was taken over by another is refused, so two workers can never both save a result. The `gee_worker` role is created without a password; set one by hand with `ALTER ROLE gee_worker PASSWORD '...'`.
 
-The worker reads its inputs from the snapshot row itself: the frozen `parcel_geometry` (not the live parcel), the date range, the cloud settings and the methodology. The database triggers that freeze snapshot inputs and completed snapshots apply to both services.
+The worker reads its inputs from the snapshot row itself: the frozen `parcel_geometry` (not the live parcel), the date range, the parameters and the methodology. The database triggers that freeze snapshot inputs and completed snapshots apply to both services.
 
 Failures are recorded on the job and snapshot with a code. Terminal: `NO_IMAGERY`, `NO_CLEAR_PIXELS`, `COMPUTATION_TOO_LARGE` (over Earth Engine's limit for one request), `UNSUPPORTED_METHODOLOGY`, `GEE_ERROR` (snapshot → `failed`). Retryable: `GEE_QUOTA`, `GEE_TIMEOUT`, `UPSTREAM_ERROR` (job re-queued with backoff).
 
-The worker finds each methodology's code in `app/registry.py`, keyed by slug.
+Each methodology's code is a plugin in `app/plugins/<name>/`, found automatically by `app/registry.py` and keyed by slug. At startup the worker compares every plugin's manifest with `methodologies` and `methodology_parameters` and exits if they differ, so jobs wait in the queue instead of failing. A new methodology or parameter is added with a migration.
 
 ### Correctness rules
 
-1. Never report a value without clear pixels: the snapshot fails with `NO_IMAGERY` or `NO_CLEAR_PIXELS`, never `0`. Every result includes `valid_pixel_pct`. There is no minimum percentage yet.
+1. Never report a value without clear pixels: the snapshot fails with `NO_IMAGERY` or `NO_CLEAR_PIXELS`, never `0`. Every result includes `valid_pixel_pct`. Below `min_clear_pct` the snapshot still completes, with a sealed `low_coverage` flag.
 2. Record **every** scene that went into the composite.
 3. Store all timestamps as UTC ISO-8601.
 4. Measure area on the Earth's actual surface (geography), matching PostGIS `area_ha`.
@@ -280,7 +282,7 @@ The worker finds each methodology's code in `app/registry.py`, keyed by slug.
 | **1. One snapshot end to end** | ✅ Queue, hash chain, worker on Earth Engine, snapshot endpoints |
 | **2. Hardening** | ✅ Retries with backoff, stuck-job recovery. Remaining: idempotency, mock Earth Engine, contract tests |
 | **3. Frontend** | ✅ Overview, parcels, register parcel, parcel detail, snapshot audit view, NDVI map, time series |
-| **4. Analysis plugins** | Proposed below |
+| **4. Analysis plugins** | In progress: plugin folders, manifests, generic parameters, record format v3. Next: artifacts, a second plugin |
 | **5. Change analysis** | Per-pixel difference maps, area-based measurements, same-season comparisons |
 | **6. Breadth** | Scheduled monitoring, PDF audit export, auditor sharing, passkeys/SSO |
 
@@ -292,9 +294,9 @@ The worker finds each methodology's code in `app/registry.py`, keyed by slug.
 
 ## Proposed: analysis plugins
 
-**Status: proposal, not built.** Goal: add analyses (rainfall, phenology, water history, terrain, EUDR) without touching the core each time. Diagrams and the data model are in [docs/design/multi-analysis.md](docs/design/multi-analysis.md); today's system is in [docs/architecture.md](docs/architecture.md).
+**Status: partly built** (see [Build order](#build-order)). Goal: add analyses (rainfall, phenology, water history, terrain, EUDR) without touching the core each time. Diagrams and the data model are in [docs/design/multi-analysis.md](docs/design/multi-analysis.md); today's system is in [docs/architecture.md](docs/architecture.md).
 
-Built so far: the worker's methodology registry (`app/registry.py`). The job fields, image table and frontend still assume NDVI.
+Built so far: plugin folders with auto-discovery, manifests checked against the database at startup, generic parameters through the API and worker, source versions and quality flags in record format v3. The image table and the frontend still assume NDVI.
 
 ### What a plugin is
 
@@ -308,7 +310,7 @@ backend/gee-service/app/plugins/
 └── chirps_rain_season/
 ```
 
-The manifest is the single source of truth. On startup the worker publishes each manifest to `methodologies`; the Go API validates requests against it, and the frontend builds its form and help text from it. Go and Python still only meet in Postgres. A plugin that uses an existing output type (value, time series, map, events) needs no Go or frontend change.
+The manifest describes the plugin; migrations publish the same values to `methodologies` and `methodology_parameters`, and the worker refuses to start if the two differ. The Go API validates requests against `methodology_parameters`, and the frontend will build its form and help text from it. Go and Python still only meet in Postgres. A plugin that uses an existing output type (value, time series, map, events) needs no Go or frontend change.
 
 Plugins live in this repo and are reviewed like other code. They are not installed at runtime, because sealed records are only trustworthy if the code behind them is known.
 
@@ -326,7 +328,7 @@ Versions and hashes do different jobs, so both stay. A version **names** what ra
 | Record format | ✅ `record_format` | ❌ | Old records must keep verifying under their own format |
 | Map images and other artifacts | ❌ | ✅ SHA-256, once they become `artifacts` | Today's NDVI image isn't hashed |
 
-The worker refuses to start if a manifest differs from what is already published under the same version: changing a calculation means a new version, and old records stay reproducible.
+The worker refuses to start if a manifest differs from what is published under the same version: changing a calculation means a new version, and old records stay reproducible.
 
 ### Proposed system design
 
@@ -372,8 +374,8 @@ What exists today, and what the proposal adds.
 
 ### Build order
 
-1. Plugin folders, auto-discovery and manifests; NDVI moved onto them with no change in behaviour.
-2. Generic parameters, dataset and code versions, manifest hash, quality flags; record format v3.
+1. ✅ Plugin folders, auto-discovery and manifests; NDVI moved onto them with no change in behaviour.
+2. ✅ Generic parameters, source versions, quality flags; record format v3. Remaining: code version and manifest hash.
 3. `series_points` and `artifacts`; methodology-aware frontend views.
 4. Second plugin, `chirps-rain-season`, end to end.
 5. Prototype water history and rainfall-adjusted residuals on parcels with known ground truth.

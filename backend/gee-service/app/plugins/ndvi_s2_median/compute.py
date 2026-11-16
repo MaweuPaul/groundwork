@@ -4,45 +4,36 @@ Sentinel-2 surface reflectance scenes in the window, under the snapshot's scene 
 are cloud-masked per pixel with Cloud Score+ at the snapshot's clear threshold, turned into
 NDVI, and median-composited. The parcel's mean and max NDVI and its share of clear pixels
 are the measurements. Both cloud settings come from the snapshot and are sealed into its record.
+A snapshot with less than min_clear_pct clear pixels still completes, flagged low_coverage.
 """
 
 import json
-from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import ee
 
+from app.contract import Measurement, Result, Scene
 from app.errors import JobError
 from app.models import Job, Methodology
+from app.plugins.ndvi_s2_median.manifest import MANIFEST
 
 S2_COLLECTION = "COPERNICUS/S2_SR_HARMONIZED"
 CLOUD_SCORE_COLLECTION = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"
 SCALE_M = 10
 PROVIDER = "Copernicus Sentinel-2 via Google Earth Engine"
+PROCESSING_LEVEL = "L2A"
 
-SCENE_PROPERTIES = ["system:index", "system:time_start", "CLOUDY_PIXEL_PERCENTAGE", "SPACECRAFT_NAME", "PRODUCT_ID"]
-
-
-@dataclass(frozen=True)
-class Measurement:
-    value: float
-    metadata: dict[str, Any] = field(default_factory=dict)
+SCENE_PROPERTIES = [
+    "system:index", "system:time_start", "CLOUDY_PIXEL_PERCENTAGE", "SPACECRAFT_NAME", "PRODUCT_ID", "system:version",
+]
 
 
-@dataclass(frozen=True)
-class Scene:
-    scene_id: str
-    satellite: str
-    acquisition_time: datetime
-    cloud_cover_pct: float | None
-    product_id: str | None
-
-
-@dataclass(frozen=True)
-class Result:
-    measurements: dict[str, Measurement]
-    scenes: list[Scene]
+def setting(parameters: dict[str, Any], name: str) -> float:
+    """A parameter's value, or its manifest default for snapshots created before it existed."""
+    if name in parameters:
+        return float(parameters[name])
+    return next(p.default for p in MANIFEST.parameters if p.name == name)
 
 
 def check_supported(m: Methodology) -> None:
@@ -100,7 +91,11 @@ def run(job: Job, methodology: Methodology) -> Result:
 
     geometry = ee.Geometry(json.loads(job.geometry_geojson))
     scenes, composite = build_composite(
-        geometry, job.date_start, job.date_end, job.max_scene_cloud_pct, job.cloud_score_threshold
+        geometry,
+        job.date_start,
+        job.date_end,
+        setting(job.parameters, "max_scene_cloud_pct"),
+        setting(job.parameters, "cloud_score_threshold"),
     )
 
     reducer = (
@@ -126,11 +121,15 @@ def run(job: Job, methodology: Methodology) -> Result:
 
 def summarize(info: dict[str, Any], job: Job) -> Result:
     """Turns Earth Engine's response into measurements. Never invents a value for missing data."""
+    max_cloud = setting(job.parameters, "max_scene_cloud_pct")
+    threshold = setting(job.parameters, "cloud_score_threshold")
+    min_clear = setting(job.parameters, "min_clear_pct")
+
     rows = info.get("scenes") or []
     if not rows:
         raise JobError(
             "NO_IMAGERY",
-            f"No Sentinel-2 scenes with at most {job.max_scene_cloud_pct:g}% cloud cover in this window.",
+            f"No Sentinel-2 scenes with at most {max_cloud:g}% cloud cover in this window.",
             retryable=False,
         )
 
@@ -141,7 +140,7 @@ def summarize(info: dict[str, Any], job: Job) -> Result:
         raise JobError(
             "NO_CLEAR_PIXELS",
             f"All {len(rows)} scenes were cloudy over the parcel at clear threshold "
-            f"{job.cloud_score_threshold:g}; no clear pixels to measure.",
+            f"{threshold:g}; no clear pixels to measure.",
             retryable=False,
         )
 
@@ -158,7 +157,7 @@ def summarize(info: dict[str, Any], job: Job) -> Result:
                 "clear_pixels": clear_pixels,
                 "parcel_pixels": parcel_pixels,
                 "scale_m": SCALE_M,
-                "cloud_score_plus_threshold": job.cloud_score_threshold,
+                "cloud_score_plus_threshold": threshold,
             },
         ),
     }
@@ -170,7 +169,15 @@ def summarize(info: dict[str, Any], job: Job) -> Result:
             acquisition_time=datetime.fromtimestamp(time_start / 1000, tz=timezone.utc),
             cloud_cover_pct=cloud,
             product_id=product_id,
+            provider=PROVIDER,
+            processing_level=PROCESSING_LEVEL,
+            asset_uri=f"{S2_COLLECTION}/{scene_id}",
+            source_version=None if version is None else str(version),
         )
-        for scene_id, time_start, cloud, spacecraft, product_id in rows
+        for scene_id, time_start, cloud, spacecraft, product_id, version in rows
     ]
-    return Result(measurements=measurements, scenes=scenes)
+
+    flags = {}
+    if valid_pct < min_clear:
+        flags["low_coverage"] = f"{valid_pct:.1f}% of the parcel was clear, below the {min_clear:g}% minimum."
+    return Result(measurements=measurements, scenes=scenes, flags=flags)

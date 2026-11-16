@@ -2,10 +2,10 @@ package handler
 
 import (
 	"errors"
-	"log"
 	"net/http"
 
 	"groundwork/internal/httpx"
+	"groundwork/internal/logging"
 	"groundwork/internal/middleware"
 	"groundwork/internal/models"
 	"groundwork/internal/service"
@@ -51,7 +51,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	user, pair, err := h.service.Register(req.Email, req.Password, req.FirstName, req.LastName, req.Username, req.Role)
 	if err != nil {
-		writeAuthError(w, err)
+		writeAuthError(w, r, err)
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, pair, err := h.service.Login(req.Email, req.Password)
 	if err != nil {
-		writeAuthError(w, err)
+		writeAuthError(w, r, err)
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	pair, err := h.service.Refresh(req.RefreshToken)
 	if err != nil {
-		writeAuthError(w, err)
+		writeAuthError(w, r, err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 // writeAuthError maps service errors to status codes. Anything unexpected
 // is logged and hidden behind a generic 500 so database details never leak.
-func writeAuthError(w http.ResponseWriter, err error) {
+func writeAuthError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrMissingFields),
 		errors.Is(err, service.ErrInvalidRole):
@@ -104,7 +104,7 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		errors.Is(err, service.ErrInvalidRefreshToken):
 		httpx.WriteError(w, http.StatusUnauthorized, err.Error())
 	default:
-		log.Printf("auth: %v", err)
+		logging.From(r.Context()).Error("auth", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 	}
 }
@@ -120,7 +120,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	if req.RefreshToken != "" {
 		if err := h.service.Logout(req.RefreshToken); err != nil {
-			writeAuthError(w, err)
+			writeAuthError(w, r, err)
 			return
 		}
 	}

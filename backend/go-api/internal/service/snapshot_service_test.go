@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -48,8 +49,9 @@ func (f *fakeSnapshotRepo) ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUI
 }
 
 type fakeMethodologyRepo struct {
-	m   *models.Methodology
-	err error
+	m      *models.Methodology
+	params []models.MethodologyParameter
+	err    error
 }
 
 func (f *fakeMethodologyRepo) GetBySlugVersion(slug, version string) (*models.Methodology, error) {
@@ -66,7 +68,20 @@ func (f *fakeMethodologyRepo) List() ([]models.Methodology, error) {
 	return nil, nil
 }
 
+func (f *fakeMethodologyRepo) Parameters(methodologyID uuid.UUID) ([]models.MethodologyParameter, error) {
+	if f.params == nil {
+		return ndviParams, nil
+	}
+	return f.params, nil
+}
+
 var ndvi = &models.Methodology{ID: uuid.New(), Slug: "ndvi-s2-median", Version: "1.0.0", MaxCloudPct: 20}
+
+var ndviParams = []models.MethodologyParameter{
+	{Name: "cloud_score_threshold", Label: "Clear pixel threshold", Type: "number", Min: 0.40, Max: 0.80, Default: 0.60},
+	{Name: "max_scene_cloud_pct", Label: "Max scene cloud (%)", Type: "number", Min: 0.01, Max: 100, Default: 20},
+	{Name: "min_clear_pct", Label: "Minimum clear pixels (%)", Type: "number", Min: 0, Max: 100, Default: 50},
+}
 
 // newTestSnapshotService fixes "now" at 2026-11-02 so date rules are deterministic.
 func newTestSnapshotService(snaps *fakeSnapshotRepo, meths *fakeMethodologyRepo) *snapshotService {
@@ -113,20 +128,22 @@ func TestCreateSnapshotQueuesValidRequest(t *testing.T) {
 	}
 }
 
-func ptr(v float64) *float64 { return &v }
+func withParam(name string, value float64) func(*CreateSnapshotInput) {
+	return func(in *CreateSnapshotInput) { in.Parameters = map[string]float64{name: value} }
+}
 
-func TestCreateSnapshotCloudOptions(t *testing.T) {
+func TestCreateSnapshotParameters(t *testing.T) {
 	tests := []struct {
-		name          string
-		cloudPct      *float64
-		threshold     *float64
-		wantCloudPct  float64
-		wantThreshold float64
+		name  string
+		given map[string]float64
+		want  repository.Parameters
 	}{
-		{"defaults from the methodology", nil, nil, 20, 0.60},
-		{"custom values", ptr(60), ptr(0.5), 60, 0.5},
-		{"rounded like the database stores them", ptr(33.333), ptr(0.6256), 33.33, 0.626},
-		{"edges are allowed", ptr(100), ptr(0.4), 100, 0.4},
+		{"defaults from the methodology", nil,
+			repository.Parameters{"max_scene_cloud_pct": 20, "cloud_score_threshold": 0.60, "min_clear_pct": 50}},
+		{"custom values", map[string]float64{"max_scene_cloud_pct": 60, "cloud_score_threshold": 0.5},
+			repository.Parameters{"max_scene_cloud_pct": 60, "cloud_score_threshold": 0.5, "min_clear_pct": 50}},
+		{"edges are allowed", map[string]float64{"max_scene_cloud_pct": 100, "cloud_score_threshold": 0.4, "min_clear_pct": 0},
+			repository.Parameters{"max_scene_cloud_pct": 100, "cloud_score_threshold": 0.4, "min_clear_pct": 0}},
 	}
 
 	for _, tt := range tests {
@@ -134,16 +151,26 @@ func TestCreateSnapshotCloudOptions(t *testing.T) {
 			snaps := &fakeSnapshotRepo{id: uuid.New()}
 			svc := newTestSnapshotService(snaps, &fakeMethodologyRepo{m: ndvi})
 			in := validInput()
-			in.MaxSceneCloudPct, in.CloudScoreThreshold = tt.cloudPct, tt.threshold
+			in.Parameters = tt.given
 
 			if _, err := svc.CreateSnapshot(in); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if snaps.got.MaxSceneCloudPct != tt.wantCloudPct || snaps.got.CloudScoreThreshold != tt.wantThreshold {
-				t.Errorf("got %v%% / %v, want %v%% / %v",
-					snaps.got.MaxSceneCloudPct, snaps.got.CloudScoreThreshold, tt.wantCloudPct, tt.wantThreshold)
+			if !reflect.DeepEqual(snaps.got.Parameters, tt.want) {
+				t.Errorf("parameters = %v, want %v", snaps.got.Parameters, tt.want)
 			}
 		})
+	}
+}
+
+func TestCreateSnapshotWithoutParameters(t *testing.T) {
+	snaps := &fakeSnapshotRepo{id: uuid.New()}
+	svc := newTestSnapshotService(snaps, &fakeMethodologyRepo{m: ndvi, params: []models.MethodologyParameter{}})
+	if _, err := svc.CreateSnapshot(validInput()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(snaps.got.Parameters) != 0 {
+		t.Errorf("parameters = %v, want none", snaps.got.Parameters)
 	}
 }
 
@@ -160,10 +187,12 @@ func TestCreateSnapshotRejectsBadInput(t *testing.T) {
 		{"end in the future", func(in *CreateSnapshotInput) { in.DateEnd = "2026-11-03" }},
 		{"before Sentinel-2", func(in *CreateSnapshotInput) { in.DateStart = "2015-06-22" }},
 		{"longer than a year", func(in *CreateSnapshotInput) { in.DateStart, in.DateEnd = "2023-01-01", "2024-01-03" }},
-		{"zero scene cloud", func(in *CreateSnapshotInput) { in.MaxSceneCloudPct = ptr(0) }},
-		{"scene cloud over 100", func(in *CreateSnapshotInput) { in.MaxSceneCloudPct = ptr(100.5) }},
-		{"threshold too lenient", func(in *CreateSnapshotInput) { in.CloudScoreThreshold = ptr(0.3) }},
-		{"threshold too strict", func(in *CreateSnapshotInput) { in.CloudScoreThreshold = ptr(0.85) }},
+		{"zero scene cloud", withParam("max_scene_cloud_pct", 0)},
+		{"scene cloud over 100", withParam("max_scene_cloud_pct", 100.5)},
+		{"threshold too lenient", withParam("cloud_score_threshold", 0.3)},
+		{"threshold too strict", withParam("cloud_score_threshold", 0.85)},
+		{"negative min clear", withParam("min_clear_pct", -1)},
+		{"unknown parameter", withParam("rain_threshold_mm", 5)},
 	}
 
 	for _, tt := range tests {
