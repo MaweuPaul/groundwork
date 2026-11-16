@@ -7,7 +7,8 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { useEffect, useRef, useState } from 'react';
 import type { GeoJSONStoreFeatures, TerraDraw } from 'terra-draw';
 
-import { bounds, centroid, parseBoundary, type PolygonCoords } from '@/lib/geo';
+import { importBoundary, type ImportedBoundary } from '@/lib/boundary-import';
+import { bounds, centroid, type PolygonCoords } from '@/lib/geo';
 import { basemapStyle, loadMapLibre, setBasemap as applyBasemap, type Basemap } from '@/lib/map';
 
 type Tool = 'polygon' | 'select';
@@ -27,9 +28,11 @@ const drawnFeatures = (features: GeoJSONStoreFeatures[]) =>
 const BoundaryMap = ({
   polygons,
   onChange,
+  onImport,
 }: {
   polygons: PolygonCoords[];
   onChange: (polygons: PolygonCoords[]) => void;
+  onImport?: (imported: ImportedBoundary) => void;
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -200,19 +203,20 @@ const BoundaryMap = ({
     chooseTool('polygon');
   };
 
-  const upload = async (file: File) => {
+  const upload = async (files: File[]) => {
     const draw = drawRef.current;
     if (!draw) return;
     setError(null);
 
-    let shapes: PolygonCoords[];
+    let imported: ImportedBoundary;
     try {
-      shapes = parseBoundary(await file.text());
+      imported = await importBoundary(files);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not read the file.');
       return;
     }
 
+    const shapes = imported.polygons;
     draw.clear();
     setSelectedId(null);
     const results = draw.addFeatures(
@@ -231,6 +235,7 @@ const BoundaryMap = ({
 
     mapRef.current?.fitBounds(bounds(shapes), { padding: 60, maxZoom: 17, duration: 800 });
     chooseTool('select');
+    onImport?.(imported);
   };
 
   const center = centroid(polygons);
@@ -263,7 +268,7 @@ const BoundaryMap = ({
               <Trash2 className="size-3.5" /> Delete
             </button>
             <button type="button" disabled={!ready} onClick={() => fileRef.current?.click()} className={toolButton(false)}>
-              <FileUp className="size-3.5" /> Upload GeoJSON
+              <FileUp className="size-3.5" /> Upload boundary
             </button>
             <button type="button" disabled={!canDelete} onClick={clearAll} className={toolButton(false)}>
               <X className="size-3.5" /> Clear
@@ -271,11 +276,12 @@ const BoundaryMap = ({
             <input
               ref={fileRef}
               type="file"
-              accept=".geojson,.json,application/geo+json,application/json"
+              multiple
+              accept=".geojson,.json,.zip,.shp,.shx,.dbf,.prj,.cpg,application/geo+json,application/json,application/zip"
               className="hidden"
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) upload(file);
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) upload(files);
                 e.target.value = '';
               }}
             />

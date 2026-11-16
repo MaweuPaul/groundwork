@@ -8,6 +8,7 @@ import { createParcelAction, type ParcelFormState } from '@/app/(app)/parcels/ne
 import BoundaryMap from '@/components/features/parcels/boundary-map';
 import Border from '@/components/shared/border';
 import { Button } from '@/components/ui/button';
+import type { ImportedBoundary } from '@/lib/boundary-import';
 import { measure, toGeometry, type PolygonCoords } from '@/lib/geo';
 
 const initialState: ParcelFormState = {};
@@ -23,6 +24,8 @@ function formatPerimeter(m: number) {
 const RegisterParcelForm = () => {
   const [state, formAction, pending] = useActionState(createParcelAction, initialState);
   const [polygons, setPolygons] = useState<PolygonCoords[]>([]);
+  const [imported, setImported] = useState<ImportedBoundary | null>(null);
+  const source = polygons.length > 0 ? imported : null;
 
   const geometry = toGeometry(polygons);
   const stats = measure(polygons);
@@ -38,7 +41,7 @@ const RegisterParcelForm = () => {
 
   return (
     <form action={formAction} noValidate className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-      <BoundaryMap polygons={polygons} onChange={setPolygons} />
+      <BoundaryMap polygons={polygons} onChange={setPolygons} onImport={setImported} />
 
       <Border className="flex h-fit flex-col gap-4 p-5">
         <div className="flex items-center justify-between gap-2">
@@ -109,6 +112,8 @@ const RegisterParcelForm = () => {
         </div>
 
         <input type="hidden" name="geometry" value={geometry ? JSON.stringify(geometry) : ''} />
+        <input type="hidden" name="boundary_source" value={source?.source ?? ''} />
+        <input type="hidden" name="boundary_crs" value={source?.crs ?? ''} />
 
         <div className="flex flex-col gap-3 rounded-md bg-surface-container p-3">
           <div className="flex items-center justify-between px-1">
@@ -150,6 +155,13 @@ const RegisterParcelForm = () => {
               ))}
             </ol>
           </details>
+
+          {source && (
+            <p className="px-1 text-caption text-muted-foreground">
+              Imported from <span className="font-mono text-foreground">{source.source}</span>
+              {source.crs.startsWith('WGS 84 (EPSG:4326)') ? '.' : <>, converted from {source.crs}.</>}
+            </p>
+          )}
 
           <p className="px-1 text-caption text-muted-foreground">
             Estimated in the browser. The official area is computed by PostGIS when you save.
