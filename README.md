@@ -61,7 +61,9 @@ This repository is a monorepo containing the frontend and two separate backend s
     │   │   ├── database/        # Database connection
     │   │   ├── handler/         # HTTP handlers
     │   │   ├── httpx/           # Shared JSON request/response helpers
+    │   │   ├── integration/     # Tests against a real PostGIS database (see Tests)
     │   │   ├── middleware/      # Authentication, roles, request logging, panic recovery
+    │   │   ├── migrate/         # Applies migrations; used by cmd/migrate and the integration tests
     │   │   ├── models/          # GORM entities mapped to PostGIS tables
     │   │   ├── repository/      # DB operations
     │   │   ├── routes/          # One file per feature; auth applied once to the protected group
@@ -169,6 +171,29 @@ See [backend/gee-service/README.md](backend/gee-service/README.md) for the servi
 cd backend/gee-service
 python -m app.worker
 ```
+
+### 5. Tests
+Unit tests need nothing set up:
+```bash
+cd backend/go-api && go test ./...
+cd backend/gee-service && python -m pytest
+cd frontend && npx tsc --noEmit && npm run lint
+```
+
+The Go integration tests in `internal/integration` run the repositories and the database's own rules against a real PostGIS database: parameter checks, the job queue, sealing, the hash chain, the triggers that freeze completed snapshots, series sealing and the activity feed. They need a separate database whose name ends in `_test`; they refuse any other name, run the migrations themselves, and roll back every test, so it stays empty. Create it once as a superuser:
+```sql
+CREATE DATABASE groundwork_test;
+\c groundwork_test
+CREATE EXTENSION postgis;
+CREATE EXTENSION pgcrypto;
+```
+Then run them with `TEST_DATABASE_URL` set (without it they are skipped):
+```bash
+cd backend/go-api
+TEST_DATABASE_URL="postgres://USER:PASSWORD@localhost:5432/groundwork_test?sslmode=disable" go test ./internal/integration/
+```
+
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of this on every pull request and push to `main`, with the integration tests against a `postgis/postgis:16-3.4` service.
 
 ## Snapshot Pipeline
 
@@ -280,7 +305,7 @@ Each methodology's code is a plugin in `app/plugins/<name>/`, found automaticall
 |---|---|
 | **0. Foundations** | ✅ Ownership, MultiPolygon parcels, GeoJSON, auth, roles, methodology seed |
 | **1. One snapshot end to end** | ✅ Queue, hash chain, worker on Earth Engine, snapshot endpoints |
-| **2. Hardening** | ✅ Retries with backoff, stuck-job recovery. Remaining: idempotency, mock Earth Engine, contract tests |
+| **2. Hardening** | ✅ Retries with backoff, stuck-job recovery, integration tests and CI on PostGIS. Remaining: idempotency, mock Earth Engine |
 | **3. Frontend** | ✅ Overview, parcels, register parcel, parcel detail, snapshot audit view, NDVI map, time series |
 | **4. Analysis plugins** | In progress: plugin folders, manifests, generic parameters, record format v3. Next: artifacts, a second plugin |
 | **5. Change analysis** | Per-pixel difference maps, area-based measurements, same-season comparisons |
