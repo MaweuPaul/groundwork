@@ -57,7 +57,7 @@ The Go integration tests also need a `groundwork_test` database and `TEST_DATABA
 | [docs/architecture.md](docs/architecture.md) | Concepts, the snapshot pipeline, the hash chain, the Go ↔ Python contract, plugins |
 | [docs/deploy.md](docs/deploy.md) | Free-tier deployment on Vercel, Render and Supabase |
 | [docs/roadmap.md](docs/roadmap.md) | Phases, open decisions, planned work |
-| [docs/design/multi-analysis.md](docs/design/multi-analysis.md) | Proposal: many analyses as plugins |
+| [docs/design/multi-analysis.md](docs/design/multi-analysis.md) | Design for many analyses as plugins (partly built) |
 
 ## Licence note
 
