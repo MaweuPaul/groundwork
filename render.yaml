@@ -24,6 +24,11 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      # The same value as PROXY_SECRET on Vercel; lets the API rate-limit logins per visitor.
+      - key: PROXY_SECRET
+        sync: false
+      - key: BEHIND_PROXY
+        value: "true"
       - key: LOG_FORMAT
         value: json
       - key: WORKER_ID

@@ -1,6 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/lib/session";
 
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
+const PROXY_SECRET = process.env.PROXY_SECRET;
 
 export type AuthFormState = {
   error?: string;
@@ -23,12 +24,22 @@ type ApiResult =
   | { ok: true; data: TokenPair }
   | { ok: false; status: number; error: string };
 
+// The API rate-limits logins and sign-ups per visitor, but these requests come from this
+// server, so it passes the visitor's address on, with the secret that makes the API trust it.
+// Vercel sets x-forwarded-for itself, so the browser can't choose it.
+async function visitorHeaders(): Promise<Record<string, string>> {
+  if (!PROXY_SECRET) return {};
+  const incoming = await headers();
+  const ip = incoming.get("x-real-ip") ?? incoming.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return ip ? { "X-Client-IP": ip, "X-Proxy-Secret": PROXY_SECRET } : {};
+}
+
 async function postJSON(path: string, body: unknown): Promise<ApiResult> {
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await visitorHeaders()) },
       body: JSON.stringify(body),
       cache: "no-store",
     });
