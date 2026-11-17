@@ -60,9 +60,9 @@ export default async function SnapshotPage({ params }: { params: Promise<{ ref: 
       <Border className="flex flex-wrap items-start justify-between gap-4 p-6">
         <div className="flex min-w-0 flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {s.chain_seq && (
+            {s.parcel_seq && (
               <span className="rounded-sm bg-primary px-2 py-0.5 font-mono text-micro font-semibold tracking-[0.08em] text-primary-foreground uppercase">
-                Record #{s.chain_seq}
+                Record #{s.parcel_seq}
               </span>
             )}
             <StatusBadge status={s.status} />

@@ -43,4 +43,4 @@ assessment idea: `chirps-rain-season`, `s2-phenology`, `water-history`, `drainag
 | Snapshot (format v2) | It completes | Inputs incl. cloud settings, frozen boundary, every measurement and scene, previous record hash |
 | Series (format v1) | Its last window completes or fails | Series settings and each window's record hash (or "failed"), in date order |
 
-`verify_snapshot_chain()` recomputes every snapshot hash; `series_record_hash()` recomputes a series.
+`verify_parcel_chain(parcel_id)` recomputes one parcel's chain and `verify_snapshot_chain()` every chain; `series_record_hash()` recomputes a series.

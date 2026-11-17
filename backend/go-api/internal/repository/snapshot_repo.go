@@ -54,7 +54,8 @@ type SnapshotDetail struct {
 	CreatedAt      time.Time          `json:"created_at"`
 	StartedAt      *time.Time         `json:"started_at,omitempty"`
 	CompletedAt    *time.Time         `json:"completed_at,omitempty"`
-	ChainSeq       *int64             `json:"chain_seq,omitempty"`
+	ChainSeq       *int64             `json:"chain_seq,omitempty"` // position in the closed global chain, for records sealed before per-parcel chains
+	ParcelSeq      *int64             `json:"parcel_seq,omitempty"` // position in the parcel's own chain
 	RecordHash     *string            `json:"record_hash,omitempty"`
 	PrevRecordHash *string            `json:"prev_record_hash,omitempty"`
 	Job            *SnapshotJobInfo   `json:"job,omitempty"`
@@ -200,6 +201,7 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		StartedAt           *time.Time
 		CompletedAt         *time.Time
 		ChainSeq            *int64
+		ParcelSeq           *int64
 		RecordHash          *string
 		PrevRecordHash      *string
 		JobStatus           *string
@@ -219,7 +221,7 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		       s.cloud_score_threshold::float8 AS cloud_score_threshold, s.record_format, s.code_version,
 		       CASE WHEN s.record_format >= 4 THEN methodology_manifest_hash(s.methodology_id) END AS manifest_sha256,
 		       s.geometry_hash, s.created_at, s.started_at, s.completed_at,
-		       s.chain_seq, s.record_hash, s.prev_record_hash,
+		       s.chain_seq, parcel_record_number(s) AS parcel_seq, s.record_hash, s.prev_record_hash,
 		       j.status AS job_status, j.attempts AS job_attempts,
 		       j.max_attempts AS job_max_attempts, j.run_after AS job_run_after,
 		       j.last_error_code AS job_last_error_code
@@ -260,6 +262,7 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		StartedAt:           row.StartedAt,
 		CompletedAt:         row.CompletedAt,
 		ChainSeq:            row.ChainSeq,
+		ParcelSeq:           row.ParcelSeq,
 		RecordHash:          row.RecordHash,
 		PrevRecordHash:      row.PrevRecordHash,
 		Measurements:        map[string]float64{},
@@ -331,6 +334,7 @@ type SnapshotSummary struct {
 	CreatedAt           time.Time          `json:"created_at"`
 	CompletedAt         *time.Time         `json:"completed_at,omitempty"`
 	ChainSeq            *int64             `json:"chain_seq,omitempty"`
+	ParcelSeq           *int64             `json:"parcel_seq,omitempty"`
 	RecordHash          *string            `json:"record_hash,omitempty"`
 	Measurements        map[string]float64 `json:"measurements"`
 	NdviImage           *NdviImageInfo     `json:"ndvi_image,omitempty"`
@@ -357,7 +361,7 @@ func (r *snapshotRepository) ListByParcelForOwner(parcelID, ownerID uuid.UUID) (
 		       to_char(s.date_end, 'YYYY-MM-DD') AS date_end,
 		       s.parameters, s.max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
 		       s.cloud_score_threshold::float8 AS cloud_score_threshold,
-		       s.created_at, s.completed_at, s.chain_seq, s.record_hash,
+		       s.created_at, s.completed_at, s.chain_seq, parcel_record_number(s) AS parcel_seq, s.record_hash,
 		       r.short_id AS series_short_id
 		FROM snapshots s
 		JOIN methodologies m ON m.id = s.methodology_id

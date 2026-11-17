@@ -283,22 +283,24 @@ The job queue lives in Postgres, so there is no extra infrastructure, and a snap
 
 ### Integrity: hash chain
 
-When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its inputs and outputs in a fixed order (snapshot and parcel IDs, methodology and version, sorted parameters, dates, geometry hashes, completion time, sorted measurements, sorted sources with their versions, sorted quality flags). The hash also includes the **previous** snapshot's hash (`prev_record_hash`), forming a chain like git commits.
+When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its inputs and outputs in a fixed order (snapshot and parcel IDs, methodology and version, sorted parameters, dates, geometry hashes, completion time, sorted measurements, sorted sources with their versions, sorted quality flags). The hash also includes the hash of the **same parcel's previous record** (`prev_record_hash`), forming a chain like git commits. Each parcel has its own chain: its first record links to the genesis hash (64 zeros), and nothing links across parcels, so one parcel's history can be verified without anyone else's records.
 
 - The hash is computed by a Postgres function when a snapshot becomes `completed`, so there is one implementation, independent of which service wrote the row. Verification uses the same function.
 - The full data is still stored. The hash adds tamper evidence, not compression.
-- Changing any stored value no longer matches its hash, and breaks every hash after it.
-- `verify_snapshot_chain()` recomputes the chain and reports every record that does not match. There is no API endpoint for it yet.
-- Records keep the format they were sealed with (`record_format`), so old hashes still verify when the format changes. New records use format v3 (parameters, source versions and flags); series use series format v2.
+- Changing any stored value no longer matches its hash, and breaks every later hash of that parcel.
+- `verify_parcel_chain(parcel_id)` recomputes one parcel's chain; `verify_snapshot_chain()` checks every parcel. Each reports every record that does not match. A per-parcel head (`parcel_chain_heads`) remembers each chain's length, so records removed from its end are caught too. There is no API endpoint for them yet.
+- Records sealed before per-parcel chains (migration 015) linked to whichever snapshot completed before them, of any parcel. They keep verifying in that closed global chain, and each parcel's chain continues from its latest such record.
+- Records keep the format they were sealed with (`record_format`), so old hashes still verify when the format changes. New records use format v4 (parameters, source versions, flags, the manifest hash and the worker's code version); series use series format v2.
 - **Series:** each window is sealed as its own snapshot. When the last window finishes, a trigger seals the series with one hash over its settings and every window's result in date order, so a window can't be dropped later. Series hashes are stored on the series, not in the snapshot chain.
 - The NDVI map image is a picture of the evidence and is not part of the hash.
-- Optional later step: publish the latest chain hash externally (e.g. OpenTimestamps) to prove the history existed at a point in time. No blockchain or Web3 is required.
+- A parcel chain can't show that a parcel's newest records, or the whole parcel, were deleted by someone with database access. Planned: a periodic checkpoint hashing every parcel's head, published externally (e.g. OpenTimestamps), which also proves the history existed at that time. No blockchain or Web3 is required.
 
 ### Schema status
 
 | Change | Purpose |
 |---|---|
 | ✅ `snapshots.chain_seq`, `record_hash`, `prev_record_hash` | Hash chain, write-once (migration 005) |
+| ✅ `snapshots.parcel_seq`, `parcel_chain_heads` | One chain per parcel (migration 015) |
 | ✅ `snapshot_jobs`, `gee_worker` role | Queue and least-privilege worker login (migration 006) |
 | ✅ `parcels.short_id`, `snapshots.short_id` | Clean URLs (migration 008) |
 | ✅ `snapshots.max_scene_cloud_pct`, `cloud_score_threshold`, `record_format` | Per-snapshot cloud settings, sealed from format v2 (migration 009) |
@@ -354,9 +356,9 @@ Each methodology's code is a plugin in `app/plugins/<name>/`, found automaticall
 |---|---|
 | **0. Foundations** | ✅ Ownership, MultiPolygon parcels, GeoJSON, auth, roles, methodology seed |
 | **1. One snapshot end to end** | ✅ Queue, hash chain, worker on Earth Engine, snapshot endpoints |
-| **2. Hardening** | ✅ Retries with backoff, stuck-job recovery, integration tests and CI on PostGIS. Remaining: idempotency, mock Earth Engine |
+| **2. Hardening** | ✅ Retries with backoff, stuck-job recovery, integration tests and CI on PostGIS, rate-limited logins and sign-ups, per-user snapshot limits, duplicate requests answered with the queued snapshot, one hash chain per parcel. Remaining: mock Earth Engine, chain checkpoints |
 | **3. Frontend** | ✅ Overview, parcels, register parcel, parcel detail, snapshot audit view, NDVI map, time series |
-| **4. Analysis plugins** | In progress: plugin folders, manifests, generic parameters, record format v3. Next: artifacts, a second plugin |
+| **4. Analysis plugins** | In progress: plugin folders, manifests, generic parameters, record format v4 (manifest hash and worker code version). Next: artifacts, a second plugin |
 | **5. Change analysis** | Per-pixel difference maps, area-based measurements, same-season comparisons |
 | **6. Breadth** | Scheduled monitoring, PDF audit export, auditor sharing, passkeys/SSO |
 
