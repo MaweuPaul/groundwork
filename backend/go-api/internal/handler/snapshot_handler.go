@@ -75,6 +75,7 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 
 	var invalid *service.ValidationError
+	var limit *repository.LimitError
 	switch {
 	case errors.Is(err, repository.ErrParcelNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
@@ -84,6 +85,9 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.As(err, &invalid):
 		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
+		return
+	case errors.As(err, &limit):
+		httpx.WriteError(w, limitStatus(limit), limit.Message)
 		return
 	case err != nil:
 		logging.From(r.Context()).Error("snapshots: create", "error", err)
@@ -182,6 +186,7 @@ func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
 	})
 
 	var invalid *service.ValidationError
+	var limit *repository.LimitError
 	switch {
 	case errors.Is(err, repository.ErrParcelNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
@@ -189,6 +194,8 @@ func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, err.Error())
 	case errors.As(err, &invalid):
 		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
+	case errors.As(err, &limit):
+		httpx.WriteError(w, limitStatus(limit), limit.Message)
 	case err != nil:
 		logging.From(r.Context()).Error("snapshots: create series", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
@@ -250,4 +257,12 @@ func (h *SnapshotHandler) ListMethodologies(w http.ResponseWriter, r *http.Reque
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, methodologies)
+}
+
+// limitStatus is 429 for a quota that frees up with time, 422 for a request that's too big.
+func limitStatus(e *repository.LimitError) int {
+	if e.Quota {
+		return http.StatusTooManyRequests
+	}
+	return http.StatusUnprocessableEntity
 }

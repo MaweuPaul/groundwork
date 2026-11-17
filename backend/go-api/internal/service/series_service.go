@@ -76,6 +76,7 @@ func (s *snapshotService) CreateSeries(in CreateSeriesInput) (repository.SeriesR
 			MethodologyID:      m.ID,
 			MethodologyVersion: m.Version,
 			Parameters:         params,
+			Limits:             s.limits,
 		},
 		DateStart:      start,
 		DateEnd:        end,

@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,9 @@ type Config struct {
 	ProxySecret string
 	// Set when a proxy (Render) sits in front and appends the caller to X-Forwarded-For.
 	BehindProxy bool
+	// Per user, to protect the Earth Engine quota; 0 turns a limit off.
+	SnapshotsPerDay   int
+	MaxSnapshotAreaHa float64
 }
 
 func Load() *Config {
@@ -40,6 +44,9 @@ func Load() *Config {
 		LogFormat:       getEnv("LOG_FORMAT", "text"),
 		ProxySecret:     getEnv("PROXY_SECRET", ""),
 		BehindProxy:     getEnv("BEHIND_PROXY", "") == "true",
+
+		SnapshotsPerDay:   int(getNumber("SNAPSHOTS_PER_DAY", 30)),
+		MaxSnapshotAreaHa: getNumber("MAX_SNAPSHOT_AREA_HA", 50_000),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -71,6 +78,18 @@ func getDuration(key string, fallback time.Duration) time.Duration {
 	}
 
 	return d
+}
+
+func getNumber(key string, fallback float64) float64 {
+	value := getEnv(key, "")
+	if value == "" {
+		return fallback
+	}
+	n, err := strconv.ParseFloat(value, 64)
+	if err != nil || n < 0 {
+		log.Fatalf("%s must be a number of 0 or more: %q", key, value)
+	}
+	return n
 }
 
 func getEnv(key, fallback string) string {
