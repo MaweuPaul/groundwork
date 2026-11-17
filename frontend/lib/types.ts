@@ -105,6 +105,8 @@ export type Snapshot = {
   started_at?: string;
   completed_at?: string;
   chain_seq?: number;
+  // Position in the parcel's own hash chain.
+  parcel_seq?: number;
   record_hash?: string;
   prev_record_hash?: string;
   job?: SnapshotJob;
@@ -150,6 +152,8 @@ export type SnapshotSummary = {
   created_at: string;
   completed_at?: string;
   chain_seq?: number;
+  // Position in the parcel's own hash chain.
+  parcel_seq?: number;
   record_hash?: string;
   measurements: Record<string, number>;
   ndvi_image?: NdviImage;

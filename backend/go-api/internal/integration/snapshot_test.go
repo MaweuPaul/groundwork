@@ -107,15 +107,18 @@ func TestChainLinksEachRecordToThePrevious(t *testing.T) {
 
 	var links []struct {
 		ID             string
-		ChainSeq       int64
+		ParcelSeq      int64
 		PrevRecordHash string
 	}
-	if err := tx.Raw(`SELECT id, chain_seq, prev_record_hash FROM snapshots WHERE id IN (?, ?) ORDER BY chain_seq`,
+	if err := tx.Raw(`SELECT id, parcel_seq, prev_record_hash FROM snapshots WHERE id IN (?, ?) ORDER BY parcel_seq`,
 		first, second).Scan(&links).Error; err != nil {
 		t.Fatal(err)
 	}
-	if len(links) != 2 || links[1].ChainSeq != links[0].ChainSeq+1 {
-		t.Fatalf("chain_seq not consecutive: %+v", links)
+	if len(links) != 2 || links[0].ParcelSeq != 1 || links[1].ParcelSeq != 2 {
+		t.Fatalf("parcel_seq should be 1 then 2: %+v", links)
+	}
+	if links[0].PrevRecordHash != genesis {
+		t.Errorf("the parcel's first record links to %s, want the genesis hash", links[0].PrevRecordHash)
 	}
 	if links[1].PrevRecordHash != firstHash {
 		t.Errorf("second record's prev is %s, want the first record's hash %s", links[1].PrevRecordHash, firstHash)
