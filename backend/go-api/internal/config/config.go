@@ -17,6 +17,10 @@ type Config struct {
 	RefreshTokenTTL time.Duration
 	LogLevel        string
 	LogFormat       string
+	// Shared with the frontend, which sends it with the visitor's IP (see middleware.ClientIP).
+	ProxySecret string
+	// Set when a proxy (Render) sits in front and appends the caller to X-Forwarded-For.
+	BehindProxy bool
 }
 
 func Load() *Config {
@@ -34,6 +38,8 @@ func Load() *Config {
 		RefreshTokenTTL: getDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
 		LogFormat:       getEnv("LOG_FORMAT", "text"),
+		ProxySecret:     getEnv("PROXY_SECRET", ""),
+		BehindProxy:     getEnv("BEHIND_PROXY", "") == "true",
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -43,6 +49,10 @@ func Load() *Config {
 	// A short secret makes JWTs easy to brute-force.
 	if len(cfg.JWTSecret) < 32 {
 		log.Fatal("JWT_SECRET environment variable is required and must be at least 32 characters")
+	}
+
+	if cfg.ProxySecret != "" && len(cfg.ProxySecret) < 32 {
+		log.Fatal("PROXY_SECRET must be at least 32 characters")
 	}
 
 	return cfg

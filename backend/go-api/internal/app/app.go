@@ -1,11 +1,15 @@
 package app
 
 import (
+	"net/http"
+	"time"
+
 	"gorm.io/gorm"
 
 	"groundwork/internal/config"
 	"groundwork/internal/handler"
 	"groundwork/internal/middleware"
+	"groundwork/internal/ratelimit"
 	"groundwork/internal/repository"
 	"groundwork/internal/service"
 )
@@ -17,6 +21,16 @@ type App struct {
 	Parcels   *handler.ParcelHandler
 	Snapshots *handler.SnapshotHandler
 	Activity  *handler.ActivityHandler
+	Limits    *AuthLimits
+}
+
+// AuthLimits slow down password guessing and mass sign-ups. Login is limited per caller and
+// per account, so guesses spread over many addresses still hit the account's limit.
+type AuthLimits struct {
+	ClientIP   func(*http.Request) string
+	LoginIP    *ratelimit.Limiter
+	LoginEmail *ratelimit.Limiter
+	Register   *ratelimit.Limiter
 }
 
 // New wires repositories into services, and services into handlers.
@@ -47,5 +61,11 @@ func New(cfg *config.Config, db *gorm.DB) *App {
 		Parcels:   handler.NewParcelHandler(parcelSvc, refSvc),
 		Snapshots: handler.NewSnapshotHandler(snapshotSvc, refSvc),
 		Activity:  handler.NewActivityHandler(activitySvc),
+		Limits: &AuthLimits{
+			ClientIP:   middleware.ClientIP(cfg.ProxySecret, cfg.BehindProxy),
+			LoginIP:    ratelimit.New(10, time.Minute),
+			LoginEmail: ratelimit.New(5, 3*time.Minute),
+			Register:   ratelimit.New(3, 20*time.Minute),
+		},
 	}
 }
