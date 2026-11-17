@@ -9,7 +9,7 @@ import (
 	"groundwork/internal/repository"
 )
 
-func TestSnapshotLifecycleSealsRecordV3(t *testing.T) {
+func TestSnapshotLifecycleSealsRecordV4(t *testing.T) {
 	tx := begin(t)
 	owner := newUser(t, tx, "asset_holder")
 	parcel := newParcel(t, tx, owner, "Lifecycle parcel")
@@ -55,14 +55,15 @@ func TestSnapshotLifecycleSealsRecordV3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if row.Status != "completed" || row.RecordFormat != 3 {
-		t.Fatalf("status %s, format %d; want completed, 3", row.Status, row.RecordFormat)
+	if row.Status != "completed" || row.RecordFormat != 4 {
+		t.Fatalf("status %s, format %d; want completed, 4", row.Status, row.RecordFormat)
 	}
 	if row.RecordHash != hash || row.Recomputed != hash {
 		t.Errorf("stored %s, recomputed %s, returned %s: all three must match", row.RecordHash, row.Recomputed, hash)
 	}
 	for _, line := range []string{
-		"groundwork-snapshot-v3",
+		"groundwork-snapshot-v4",
+		"code_version=" + codeVersion,
 		"param=cloud_score_threshold:0.600000000",
 		"param=max_scene_cloud_pct:20.000000000",
 		"param=min_clear_pct:40.000000000",

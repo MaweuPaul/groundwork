@@ -370,7 +370,7 @@ Each methodology's code is a plugin in `app/plugins/<name>/`, found automaticall
 
 **Status: partly built** (see [Build order](#build-order)). Goal: add analyses (rainfall, phenology, water history, terrain, EUDR) without touching the core each time. Diagrams and the data model are in [docs/design/multi-analysis.md](docs/design/multi-analysis.md); today's system is in [docs/architecture.md](docs/architecture.md).
 
-Built so far: plugin folders with auto-discovery, manifests checked against the database at startup, generic parameters through the API and worker, source versions and quality flags in record format v3. The image table and the frontend still assume NDVI.
+Built so far: plugin folders with auto-discovery, manifests checked against the database at startup, generic parameters through the API and worker, source versions and quality flags in record format v3, and the worker's code version and the manifest hash in record format v4. The image table and the frontend still assume NDVI.
 
 ### What a plugin is
 
@@ -449,7 +449,7 @@ What exists today, and what the proposal adds.
 ### Build order
 
 1. ✅ Plugin folders, auto-discovery and manifests; NDVI moved onto them with no change in behaviour.
-2. ✅ Generic parameters, source versions, quality flags; record format v3. Remaining: code version and manifest hash.
+2. ✅ Generic parameters, source versions, quality flags; record format v3. Code version and manifest hash sealed in record format v4.
 3. `series_points` and `artifacts`; methodology-aware frontend views.
 4. Second plugin, `chirps-rain-season`, end to end.
 5. Prototype water history and rainfall-adjusted residuals on parcels with known ground truth.

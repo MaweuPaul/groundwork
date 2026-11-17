@@ -46,7 +46,7 @@ def load_methodology(conn: psycopg.Connection, methodology_id: UUID) -> Methodol
     return methodology
 
 
-def save_and_complete(conn: psycopg.Connection, job: Job, worker: str, result: Result) -> str:
+def save_and_complete(conn: psycopg.Connection, job: Job, worker: str, result: Result, code_version: str) -> str:
     """Saves the results and completes the job in one transaction. Returns the record hash."""
     with conn.transaction():
         type_ids = dict(
@@ -100,7 +100,7 @@ def save_and_complete(conn: psycopg.Connection, job: Job, worker: str, result: R
 
         # Raises if another worker took the job over; the transaction then rolls back.
         (record_hash,) = conn.execute(
-            "SELECT complete_snapshot_job(%s, %s)", (job.job_id, worker)
+            "SELECT complete_snapshot_job(%s, %s, %s)", (job.job_id, worker, code_version)
         ).fetchone()
     return record_hash
 

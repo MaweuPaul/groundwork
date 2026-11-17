@@ -30,7 +30,7 @@ def process(conn: psycopg.Connection, settings: Settings, job: Job) -> None:
     try:
         methodology = queue.load_methodology(conn, job.methodology_id)
         result = registry.plugin_for(methodology.slug).compute(job, methodology)
-        record_hash = queue.save_and_complete(conn, job, settings.worker_id, result)
+        record_hash = queue.save_and_complete(conn, job, settings.worker_id, result, settings.code_version)
     except KeyboardInterrupt:
         # Hand the job back now instead of leaving it locked until the lock expires.
         record_failure(conn, settings, job, JobError("WORKER_STOPPED", "Worker was stopped mid-job.", retryable=True))
@@ -124,7 +124,7 @@ def main() -> int:
         for problem in problems:
             log.error("%s", problem)
         return 2
-    log.info("plugins: %s", ", ".join(sorted(registry.PLUGINS)))
+    log.info("plugins: %s; code %s", ", ".join(sorted(registry.PLUGINS)), settings.code_version)
 
     try:
         serve(settings)
