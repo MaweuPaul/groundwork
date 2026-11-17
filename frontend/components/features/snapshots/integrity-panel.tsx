@@ -7,6 +7,9 @@ import type { Snapshot } from '@/lib/types';
 
 // What each record format seals, matching snapshot_record_text() in the database.
 function coveredBy(format: number) {
+  if (format >= 4) {
+    return 'the methodology manifest and the exact worker code that ran, the inputs and every parameter, the frozen boundary, every measurement, every source with the version it was read at, any quality flags';
+  }
   if (format >= 3) {
     return 'the inputs and every parameter, the frozen boundary, every measurement, every source with the version it was read at, any quality flags';
   }
@@ -48,6 +51,8 @@ const IntegrityPanel = ({ snapshot }: { snapshot: Snapshot }) => {
             <HashRow label="Record hash (SHA-256)" value={snapshot.record_hash!} />
             <HashRow label="Previous record hash" value={snapshot.prev_record_hash!} />
             <HashRow label="Boundary hash" value={snapshot.geometry_hash} />
+            {snapshot.manifest_sha256 && <HashRow label="Manifest hash" value={snapshot.manifest_sha256} />}
+            {snapshot.code_version && <HashRow label="Worker code (git)" value={snapshot.code_version} />}
           </div>
           <p className="text-caption text-muted-foreground">
             Sealed {snapshot.completed_at && <LocalTime iso={snapshot.completed_at} />} as record #{snapshot.chain_seq} (format

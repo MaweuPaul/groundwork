@@ -98,6 +98,9 @@ export type Snapshot = {
   cloud_score_threshold: number;
   record_format: number;
   geometry_hash: string;
+  // Sealed from record format 4.
+  code_version?: string;
+  manifest_sha256?: string;
   created_at: string;
   started_at?: string;
   completed_at?: string;

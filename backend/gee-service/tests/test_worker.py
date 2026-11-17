@@ -6,7 +6,7 @@ from app import images, queue, registry, worker
 from app.contract import Manifest, Measurement, Plugin, Result
 from app.models import Job
 
-SETTINGS = SimpleNamespace(worker_id="test")
+SETTINGS = SimpleNamespace(worker_id="test", code_version="abc123")
 
 
 def job() -> Job:
@@ -29,11 +29,11 @@ def test_process_handles_a_plugin_with_its_own_measurements(monkeypatch):
     manifest = Manifest(slug="rain", version="1.0.0", parameters=[], measurements=["rain_total_mm"])
     monkeypatch.setattr(queue, "load_methodology", lambda conn, id: SimpleNamespace(slug="rain"))
     monkeypatch.setattr(registry, "plugin_for", lambda slug: Plugin(manifest=manifest, compute=lambda j, m: result))
-    monkeypatch.setattr(queue, "save_and_complete", lambda conn, j, w, r: saved.append(r) or "hash")
+    monkeypatch.setattr(queue, "save_and_complete", lambda conn, j, w, r, v: saved.append((r, v)) or "hash")
 
     worker.process(None, SETTINGS, job())
 
-    assert saved == [result]
+    assert saved == [(result, "abc123")]
 
 
 

@@ -155,12 +155,15 @@ func save(t *testing.T, tx *gorm.DB, snapshotID uuid.UUID, r result) {
 	}
 }
 
+// codeVersion is what the test worker reports as the code that computed its results.
+const codeVersion = "0123456789abcdef0123456789abcdef01234567"
+
 // complete saves the results and completes the job, returning the record hash.
 func complete(t *testing.T, tx *gorm.DB, job *claimedJob, r result) string {
 	t.Helper()
 	save(t, tx, job.SnapshotID, r)
 	var hash string
-	if err := tx.Raw(`SELECT complete_snapshot_job(?, ?)`, job.JobID, worker).Scan(&hash).Error; err != nil {
+	if err := tx.Raw(`SELECT complete_snapshot_job(?, ?, ?)`, job.JobID, worker, codeVersion).Scan(&hash).Error; err != nil {
 		t.Fatalf("complete: %v", err)
 	}
 	return hash

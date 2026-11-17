@@ -44,20 +44,23 @@ type SnapshotDetail struct {
 	Parameters         Parameters     `json:"parameters"`
 	Flags              []SnapshotFlag `json:"flags"`
 	// Deprecated: read parameters. Null for methodologies without these settings.
-	MaxSceneCloudPct    *float64           `json:"max_scene_cloud_pct"`
-	CloudScoreThreshold *float64           `json:"cloud_score_threshold"`
-	RecordFormat        int                `json:"record_format"`
-	GeometryHash        string             `json:"geometry_hash"`
-	CreatedAt           time.Time          `json:"created_at"`
-	StartedAt           *time.Time         `json:"started_at,omitempty"`
-	CompletedAt         *time.Time         `json:"completed_at,omitempty"`
-	ChainSeq            *int64             `json:"chain_seq,omitempty"`
-	RecordHash          *string            `json:"record_hash,omitempty"`
-	PrevRecordHash      *string            `json:"prev_record_hash,omitempty"`
-	Job                 *SnapshotJobInfo   `json:"job,omitempty"`
-	Measurements        map[string]float64 `json:"measurements"` // type slug → value
-	ImagerySources      []ImagerySourceRef `json:"imagery_sources"`
-	NdviImage           *NdviImageInfo     `json:"ndvi_image,omitempty"`
+	MaxSceneCloudPct    *float64 `json:"max_scene_cloud_pct"`
+	CloudScoreThreshold *float64 `json:"cloud_score_threshold"`
+	RecordFormat        int      `json:"record_format"`
+	GeometryHash        string   `json:"geometry_hash"`
+	// Sealed from record format 4: the worker's commit and the methodology manifest's hash.
+	CodeVersion    *string            `json:"code_version,omitempty"`
+	ManifestSHA256 *string            `json:"manifest_sha256,omitempty"`
+	CreatedAt      time.Time          `json:"created_at"`
+	StartedAt      *time.Time         `json:"started_at,omitempty"`
+	CompletedAt    *time.Time         `json:"completed_at,omitempty"`
+	ChainSeq       *int64             `json:"chain_seq,omitempty"`
+	RecordHash     *string            `json:"record_hash,omitempty"`
+	PrevRecordHash *string            `json:"prev_record_hash,omitempty"`
+	Job            *SnapshotJobInfo   `json:"job,omitempty"`
+	Measurements   map[string]float64 `json:"measurements"` // type slug → value
+	ImagerySources []ImagerySourceRef `json:"imagery_sources"`
+	NdviImage      *NdviImageInfo     `json:"ndvi_image,omitempty"`
 }
 
 // SnapshotJobInfo is the queue progress shown to the client. The worker's raw
@@ -190,6 +193,8 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		MaxSceneCloudPct    *float64
 		CloudScoreThreshold *float64
 		RecordFormat        int
+		CodeVersion         *string
+		ManifestSHA256      *string
 		GeometryHash        string
 		CreatedAt           time.Time
 		StartedAt           *time.Time
@@ -211,7 +216,8 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		       to_char(s.date_start, 'YYYY-MM-DD') AS date_start,
 		       to_char(s.date_end, 'YYYY-MM-DD') AS date_end,
 		       s.parameters, s.max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
-		       s.cloud_score_threshold::float8 AS cloud_score_threshold, s.record_format,
+		       s.cloud_score_threshold::float8 AS cloud_score_threshold, s.record_format, s.code_version,
+		       CASE WHEN s.record_format >= 4 THEN methodology_manifest_hash(s.methodology_id) END AS manifest_sha256,
 		       s.geometry_hash, s.created_at, s.started_at, s.completed_at,
 		       s.chain_seq, s.record_hash, s.prev_record_hash,
 		       j.status AS job_status, j.attempts AS job_attempts,
@@ -247,6 +253,8 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		MaxSceneCloudPct:    row.MaxSceneCloudPct,
 		CloudScoreThreshold: row.CloudScoreThreshold,
 		RecordFormat:        row.RecordFormat,
+		CodeVersion:         row.CodeVersion,
+		ManifestSHA256:      row.ManifestSHA256,
 		GeometryHash:        row.GeometryHash,
 		CreatedAt:           row.CreatedAt,
 		StartedAt:           row.StartedAt,
