@@ -1,420 +1,64 @@
 # Groundwork
 
-Groundwork is an independent verification layer for real-world land asset claims. It replaces trust in paperwork with trust in reproducible satellite data by tracking physical land boundaries and calculating vegetation health indices (like NDVI) over time.
+Groundwork is an independent verification layer for land claims. It replaces trust in paperwork with trust in reproducible satellite data: it tracks parcel boundaries, measures vegetation (NDVI) from Sentinel-2 imagery through Google Earth Engine with versioned methodologies, and seals every result into a tamper-evident hash chain per parcel.
 
-It ingests multi-source satellite imagery (e.g., Sentinel-2 via Google Earth Engine), computes spectral indices using versioned methodology, and serves auditable time-series data over a fast Go + PostGIS backend.
-
-See [docs/architecture.md](docs/architecture.md) for diagrams of how the parts talk to each other and how to add a methodology.
-
-## Architecture
-
-Two backend services, and they never call each other. PostgreSQL is the only thing they share.
-
-| Service | Owns |
-|---|---|
-| **Go API** (`backend/go-api`) | Users, sign-in and roles; parcels and ownership; requesting snapshots; serving results; the database schema (migrations) |
-| **Python worker** (`backend/gee-service`) | All satellite calculations (NDVI, EVI, land cover, ...) through Google Earth Engine; writing measurements and imagery sources |
+## How it fits together
 
 ```text
 Frontend ──▶ Go API ──▶ PostgreSQL ◀── Python worker ──▶ Google Earth Engine
 ```
 
-The Go API queues work by inserting rows; the Python worker picks them up, computes, and writes results back. Either service can be down without stopping the other: if the worker is down, snapshot requests wait in the queue; if the API is down, the worker finishes the jobs already queued. Python is used because Earth Engine's official client libraries are Python and JavaScript.
-
-### System design
-
-How the parts talk to each other today. The Go API and the Python worker only meet in PostgreSQL.
-
-![Current components and how they talk](docs/diagrams/architecture-1.svg)
-
-## Core Concepts & Schema
-
-Groundwork relies on a strict, auditable geospatial database using PostgreSQL and the PostGIS extension.
-
-- **Parcels**: Physical land boundaries owned by one user, stored as `GEOMETRY(MULTIPOLYGON, 4326)` so one parcel can have several pieces (e.g. split by a river or road). A single polygon is stored as a one-piece MultiPolygon. The system automatically calculates the exact real-world area (in hectares, summed over all pieces) using PostGIS functions that factor in the curvature of the Earth. Invalid boundaries (self-intersecting, overlapping pieces) are rejected. Parcels can be edited.
-- **Methodologies**: Immutable, version-controlled specifications that define *how* a satellite measurement is calculated (e.g., which satellite bands to use, cloud masking thresholds, and how to composite multiple images).
-- **Snapshots**: A single measurement run. It acts as the bridge connecting a specific Parcel, a specific Methodology, and a specific Date Range. A snapshot stores its own copy of the parcel geometry (plus a hash of it), so editing a parcel never changes past snapshots.
-- **Measurements**: The actual computed index values (e.g., the mean NDVI value of the parcel).
-- **Imagery Sources**: A permanent audit trail logging the exact raw satellite imagery used to calculate a specific Snapshot.
-- **Users**: Accounts with a role, either `auditor` (verifies claims) or `asset_holder` (registers parcels).
-
-Database triggers enforce the audit guarantees: snapshot inputs can never change, completed snapshots cannot be deleted or reopened, and their measurements and imagery records are frozen.
-
-## Project Structure
-
-This repository is a monorepo containing the frontend and two separate backend services.
-
-```text
-/
-├── frontend/                    # Next.js / React application
-│   ├── app/(auth)/              # Sign-in and create-account screens
-│   └── app/(app)/               # Overview, parcels, register parcel, snapshot pages
-├── docs/                        # Architecture, design proposals, diagrams
-└── backend/
-    ├── go-api/                  # Go + PostGIS API
-    │   ├── cmd/
-    │   │   ├── api/             # HTTP server
-    │   │   └── migrate/         # Applies pending SQL migrations
-    │   ├── internal/
-    │   │   ├── app/             # Wires repositories, services and handlers together
-    │   │   ├── config/          # Environment variables
-    │   │   ├── database/        # Database connection
-    │   │   ├── handler/         # HTTP handlers
-    │   │   ├── httpx/           # Shared JSON request/response helpers
-    │   │   ├── integration/     # Tests against a real PostGIS database (see Tests)
-    │   │   ├── middleware/      # Authentication, roles, request logging, panic recovery
-    │   │   ├── migrate/         # Applies migrations; used by cmd/migrate and the integration tests
-    │   │   ├── models/          # GORM entities mapped to PostGIS tables
-    │   │   ├── ratelimit/       # In-memory token buckets for login and sign-up limits
-    │   │   ├── repository/      # DB operations
-    │   │   ├── routes/          # One file per feature; auth applied once to the protected group
-    │   │   └── service/         # Business logic (auth, tokens, parcels)
-    │   ├── migrations/          # Numbered SQL migrations (001_, 002_, ...); the only place the schema changes
-    │   └── .env.example         # Example environment variables
-    └── gee-service/             # Python Earth Engine worker: all satellite calculations
-```
-
-## Authentication
-
-- `POST /auth/register`: creates a user (`email`, `password`, `first_name`, `last_name`, `username`, `role`) and returns the user plus a token pair.
-- `POST /auth/login`: returns the user plus a token pair. Unknown email and wrong password give the same error.
-- Logins and sign-ups are rate-limited (429 with `Retry-After`); see `PROXY_SECRET` under Backend API.
-- `POST /auth/refresh`: swaps a refresh token for a new pair. Each refresh token works once; a token rotated in the last 10 seconds may be reused, so parallel requests and tabs don't sign the user out.
-- `POST /auth/logout`: `refresh_token`; ends that session at once (no reuse window). Always 204.
-- `GET /me`: the signed-in user.
-
-Access tokens are short-lived HS256 JWTs (default 15 minutes). Refresh tokens are random 32-byte values (default 30 days), stored only as SHA-256 hashes and rotated on every use. Passwords are hashed with bcrypt.
-
-The frontend calls these endpoints from Next.js server actions and keeps both tokens in `httpOnly` cookies, so browser JavaScript never sees them.
-
-Every route outside `/auth/*` requires `Authorization: Bearer <access token>` (401 otherwise). Role checks return 403. Resources owned by someone else return 404, so their existence is not revealed.
-
-## Parcels
-
-Wherever a URL has `{id}`, it accepts the UUID or the 8-character `short_id`. Frontend URLs use the short ID: `/parcels/nyeri-block-a-k7x2p9qd`, `/snapshots/s4m8q2wz`. The name part is cosmetic; a stale name or a UUID link redirects to the current URL.
-
-- `GET /parcels`: the signed-in user's parcels, newest first. Each includes `centroid_lon`/`centroid_lat`, `latest_snapshot` (most recent, any status) and `latest_result` (measurements of the most recent completed snapshot); both are `null` when there are none.
-- `GET /parcels/{id}`: one parcel. 404 if it doesn't exist or belongs to someone else.
-- `POST /parcels` (`asset_holder` only): `name`, `geometry` (GeoJSON `Polygon` or `MultiPolygon`), optional `description` and `metadata`. The owner is always the signed-in user; `id`, `owner_id`, `area_ha` and timestamps in the body are ignored. Returns 201 with the saved parcel, including the computed `area_ha`. Invalid geometry returns 400.
-
-Geometry is always returned as a GeoJSON `MultiPolygon`.
-
-## Snapshots
-
-- `POST /parcels/{id}/snapshots` (`asset_holder`, own parcels only): `methodology` (slug), `methodology_version` (required; never defaults to the latest), `date_start`, `date_end` (`YYYY-MM-DD`), and optional `parameters`, e.g. `{"min_clear_pct": 40}`. Each methodology lists its parameters with their ranges and defaults on `GET /methodologies`; any left out get their default, and the full set is sealed into the record. For NDVI these are `max_scene_cloud_pct` (0.01–100, default 20), `cloud_score_threshold` (0.40–0.80, default 0.60) and `min_clear_pct` (0–100, default 50). The older top-level `max_scene_cloud_pct` and `cloud_score_threshold` fields still work when `parameters` doesn't set them. Returns **202** with `{"id", "status": "pending"}` and a `Location: /snapshots/{id}` header; the Python worker computes it in the background.
-  - In one transaction, the snapshot copies the parcel's current geometry, stores a `geometry_hash` of a normalised copy (coordinates snapped to ~1 cm, points in a standard order, so the same boundary always hashes the same), and queues its job.
-  - A request identical to one still pending or processing (same parcel, methodology, window and parameters) returns that snapshot instead of queuing another.
-  - 429 when the user's daily snapshot allowance is used up, 422 when the parcel is larger than the area limit (see `SNAPSHOTS_PER_DAY` and `MAX_SNAPSHOT_AREA_HA`).
-  - 400 if a date is malformed, `date_end` is before `date_start` or in the future, `date_start` is before 2015-06-23 (first Sentinel-2 imagery), the range is longer than a year, the methodology version doesn't exist, or a parameter is unknown or out of range. 404 if the parcel doesn't exist or isn't yours.
-- `GET /parcels/{id}/snapshots`: the parcel's snapshot history, newest first, with each snapshot's `parameters`, `flags`, measurements and `record_hash`. 404 if the parcel doesn't exist or isn't yours.
-- `POST /parcels/{id}/series` (`asset_holder`): a time series. The same fields, where the dates are the whole range, plus `window_months` and `interval_months` (1–12). Creates one snapshot per window in one transaction (at most 24; a last window that overruns is cut short at `date_end`). Every window counts against the daily allowance, and an identical series still running is returned instead of queued again. Returns **202** with `{"id", "short_id", "windows"}`.
-- `GET /parcels/{id}/series`: the parcel's series with progress and, once every window has finished, `record_hash` and `sealed_at`.
-- `GET /snapshots/{id}/ndvi.png`: the NDVI map image of a completed snapshot. `ndvi_image` on snapshot responses gives its bounds and colour scale. 404 if there is none yet or it isn't yours.
-- `GET /methodologies`: the methodologies a snapshot can be requested with, each with its `parameters` (name, label, type, min, max, default).
-- `GET /snapshots/{id}`: one snapshot of your own. Poll it after creating a snapshot until `status` is `completed` or `failed`. Returns the status (and `failure_message`), inputs (methodology, dates, `parameters`, `geometry_hash`), quality `flags` (e.g. `low_coverage`, which doesn't fail the snapshot), timings, `measurements` as a `{type: value}` map, `imagery_sources` (scene, satellite, acquisition time, cloud %), and once completed, `parcel_seq` (its position in the parcel's chain), `record_hash`, `prev_record_hash`, and from record format v4 `code_version` and `manifest_sha256`. `job` shows queue progress: attempts, `next_attempt_at` while waiting to retry, and the last error code (the worker's raw message stays internal). The frozen geometry is not included. 404 if it doesn't exist or isn't yours.
-
-## Prerequisites
-
-- **Go** (1.26+)
-- **PostgreSQL** with the **PostGIS** extension enabled
-- **Node.js** (for the frontend)
-- **Python** 3.12 (for the Earth Engine worker)
-- A **Google Cloud service account** with Earth Engine access (an API key won't work)
-
-## Setup Instructions
-
-### 1. Database
-Create a database with PostGIS enabled:
-```sql
-CREATE DATABASE groundwork;
-\c groundwork
-CREATE EXTENSION IF NOT EXISTS postgis;
-```
-
-### 2. Backend API
-```bash
-cd backend/go-api
-cp .env.example .env
-```
-
-Edit `.env`:
-
-| Variable | Required | Notes |
+| Part | Where | Does |
 |---|---|---|
-| `DATABASE_URL` | yes | e.g. `postgres://postgres:password@localhost:5432/groundwork?sslmode=disable`. URL-encode special characters in the password (`#` → `%23`). |
-| `JWT_SECRET` | yes | At least 32 characters. Generate with `openssl rand -hex 64`. |
-| `PORT` | no | Defaults to `8080`. |
-| `ACCESS_TOKEN_TTL` | no | Defaults to `15m`. |
-| `REFRESH_TOKEN_TTL` | no | Defaults to `720h` (30 days). |
-| `PROXY_SECRET` | no | At least 32 characters, the same value as the frontend's `PROXY_SECRET`. With it, logins and sign-ups are rate-limited per visitor instead of per frontend server. |
-| `BEHIND_PROXY` | no | `true` when a proxy appends the caller to `X-Forwarded-For` (Render). |
-| `SNAPSHOTS_PER_DAY` | no | Snapshots one user may queue in any 24 hours, each series window counted. Defaults to `30`; `0` turns it off. |
-| `MAX_SNAPSHOT_AREA_HA` | no | The largest parcel a snapshot may cover. Defaults to `50000` (500 km²); `0` turns it off. |
+| Frontend | `frontend/` | Next.js app: parcels, snapshots, NDVI maps, audit views |
+| Go API | `backend/go-api/` | Accounts, parcels, snapshot requests, results; owns the schema (migrations) |
+| Python worker | `backend/gee-service/` | All satellite calculations, as plugins |
+| PostgreSQL + PostGIS | | The only link between the two services: a job queue, and the triggers that seal records |
 
-Every snapshot spends the Earth Engine project's compute quota, hence the two limits above. A request identical to one still pending or processing (same parcel, methodology, window and parameters) returns that snapshot instead of queuing another, so a double click costs nothing.
+The API and the worker never call each other, so either can be down without stopping the other.
 
-Logins are limited to 10 at once then 1 a minute per visitor, and 5 at once then 1 every 3 minutes per account; sign-ups to 3 at once then 1 every 20 minutes per visitor. Limits are kept in memory, so they reset when the API restarts.
+## Quick start
 
-Apply migrations, then start the server:
+You need Go 1.26+, Node.js, Python 3.12, PostgreSQL with PostGIS, and a Google Cloud service account with Earth Engine access.
+
 ```bash
-go run ./cmd/migrate   # applies only migrations not yet recorded in schema_migrations
-go run ./cmd/api
+# Database
+createdb groundwork && psql groundwork -c 'CREATE EXTENSION postgis'
+
+# API: set DATABASE_URL and JWT_SECRET in .env
+cd backend/go-api && cp .env.example .env
+go run ./cmd/migrate && go run ./cmd/api
+
+# Worker: see backend/gee-service/README.md for the key and database role
+cd backend/gee-service && python -m app.worker
+
+# Frontend: set API_URL in .env.local if the API isn't on http://localhost:8080
+cd frontend && npm install && npm run dev
 ```
 
-If `parcels` already exists from running `001_initial_schema.sql` by hand, the migrate command records 001 as applied instead of re-running it.
+Open http://localhost:3000/register to create an account.
 
-### 3. Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Tests
 
-If the API is not on `http://localhost:8080`, create `frontend/.env.local`:
-```
-API_URL=http://localhost:8081
-```
-
-Sign-in is at `/login` and create-account at `/register`.
-
-### 4. Earth Engine worker
-See [backend/gee-service/README.md](backend/gee-service/README.md) for the service account, `.env` and database role, then:
-```bash
-cd backend/gee-service
-python -m app.worker
-```
-
-### 5. Tests
-Unit tests need nothing set up:
 ```bash
 cd backend/go-api && go test ./...
 cd backend/gee-service && python -m pytest
 cd frontend && npx tsc --noEmit && npm run lint
 ```
 
-The Go integration tests in `internal/integration` run the repositories and the database's own rules against a real PostGIS database: parameter checks, the job queue, sealing, the hash chain, the triggers that freeze completed snapshots, series sealing and the activity feed. They need a separate database whose name ends in `_test`; they refuse any other name, run the migrations themselves, and roll back every test, so it stays empty. Create it once as a superuser:
-```sql
-CREATE DATABASE groundwork_test;
-\c groundwork_test
-CREATE EXTENSION postgis;
-CREATE EXTENSION pgcrypto;
-```
-Then run them with `TEST_DATABASE_URL` set (without it they are skipped):
-```bash
-cd backend/go-api
-TEST_DATABASE_URL="postgres://USER:PASSWORD@localhost:5432/groundwork_test?sslmode=disable" go test ./internal/integration/
-```
+The Go integration tests also need a `groundwork_test` database and `TEST_DATABASE_URL`; see [docs/development.md](docs/development.md#tests). CI runs everything on every pull request.
 
-CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of this on every pull request and push to `main`, with the integration tests against a `postgis/postgis:16-3.4` service.
+## Docs
 
-### 6. Deploy (free tier)
-Three free services, none of which asks for a card:
-
-| Part | Where | Notes |
-|---|---|---|
-| Frontend | **Vercel** (Hobby) | Next.js; redeploys on every push to `main` |
-| Go API + Python worker | **Render** (free web service) | One Docker image ([backend/Dockerfile](backend/Dockerfile)); [start.sh](backend/start.sh) migrates, then runs both. Sleeps after 15 min without requests and takes about a minute to wake; a request wakes the worker too |
-| Postgres + PostGIS | **Supabase** (free) | 500 MB. Render's free Postgres is deleted after a trial period, which a tamper-evident record can't afford |
-
-Hobby and the free tiers are for noncommercial use, as is Earth Engine's free quota.
-
-**1. Supabase**
-1. Create a project. When asked, **untick "Enable Data API"** and **"Automatically expose new tables"**, and leave **automatic RLS** off (the worker reads some tables directly, and RLS without policies would hide them). Pick the European region nearest Frankfurt that's offered (London, eu-west-2, adds ~15 ms per query and works fine). Keep the database password; letters and digits only saves URL-encoding it later.
-2. SQL editor: run [deploy/supabase-setup.sql](deploy/supabase-setup.sql). It installs PostGIS in `public`, where the queue functions expect it, reinstalling it there if Supabase put it in `extensions`.
-3. Still in the SQL editor, create the worker's login with a password of your own: `CREATE ROLE gee_worker LOGIN PASSWORD '...';` The migrations see the role exists and grant it what it needs.
-4. Check **Integrations > Data API** says the Data API is disabled. That switch, not the script's revokes, is what keeps the tables private: Supabase grants new tables to `anon` and `authenticated` as `supabase_admin`, which the SQL editor's `postgres` role can't revoke, and only the Data API ever acts as those roles.
-5. **Connect > Direct > Connection Method: Session pooler**, type URI. Not Direct connection, which is IPv6-only and unreachable from Render; not Transaction pooler, which breaks the worker's `LISTEN`. Copy the host from that dialog, not from an example: it's `aws-N-REGION.pooler.supabase.com`. With your password and `?sslmode=require` appended, that is `DATABASE_URL`:
-   `postgresql://postgres.PROJECTREF:PASSWORD@aws-N-REGION.pooler.supabase.com:5432/postgres?sslmode=require`
-
-**2. Render**
-1. New > Blueprint, pick this repository on `main`; Render reads [render.yaml](render.yaml).
-2. Fill in the secrets it asks for:
-   - `DATABASE_URL`: the session pooler URI from Supabase.
-   - `WORKER_DATABASE_URL`: the same URI with the user changed to `gee_worker.PROJECTREF` and the password to the one from step 1.3. The pooler accepts the custom role.
-   - `GEE_PROJECT`: your Earth Engine Cloud project id.
-   - `GEE_CREDENTIALS_JSON`: the whole service account key file, pasted as text. The start script writes it to a private temporary file; it is never in the image or the repository.
-   - `JWT_SECRET` is generated by Render.
-   - `PROXY_SECRET`: a random string of at least 32 characters (`openssl rand -hex 32`), also set on Vercel.
-3. The logs should show the migrations applied, `server starting`, then the worker signing in to Earth Engine and `listening for jobs`. Render appends a suffix to the service URL (e.g. `https://groundwork-api-xxxx.onrender.com`); `/healthz` there returns `ok`.
-
-Common failures: `no such host` means the pooler host in a URL is wrong; `type "geometry" does not exist` means the setup script hasn't run; `password authentication failed for user X` names the URL whose password is wrong.
-
-**3. Vercel**
-1. Add New > Project, pick this repository, set **Root Directory** to `frontend`.
-2. Environment variables: `API_URL` = the Render service URL, with no trailing slash; `PROXY_SECRET` = the same value as on Render.
-3. Deploy. Functions run in Frankfurt ([vercel.json](frontend/vercel.json)), next to the API. Pushes to `main` redeploy; pull requests get preview URLs, which need `API_URL` added for the Preview environment too.
-
-Share the project's production domain (`PROJECT.vercel.app` or the alias Vercel assigns). The `-TEAM.vercel.app` deployment URLs sit behind Vercel's login by default.
-
-The first page load after the API has slept may show "Can't reach the server"; refresh after a minute.
-
-## Snapshot Pipeline
-
-How snapshots run today. The proposal for adding more analyses is under [Proposed: analysis plugins](#proposed-analysis-plugins).
-
-### Design principles
-
-1. **Snapshots are evidence, not cache.** A completed snapshot is never recomputed or overwritten. A better method means a new methodology version and new snapshots.
-2. **A methodology is a versioned spec.** A methodology row is immutable; the worker's registry maps its slug to the code that computes it.
-3. **The database is the only link between the services.** Go requests work and serves results; Python does all calculations. Neither calls the other.
-4. **Everything needed to reproduce a result is stored with it**: inputs, parameters, methodology version, and every source with the version the provider reported when it was read (Earth Engine's `system:version`). The code version and a manifest hash are not stored yet (see the proposal).
-5. **The schema is the contract.** Schema changes go through `backend/go-api/migrations` only, in backward-compatible steps (add, update both services, then remove).
-
-### Flow
-
-```text
-Frontend ──▶ Go API: POST /parcels/{id}/snapshots
-               └─ one transaction: INSERT snapshot (pending, frozen geometry + hash)
-                  + INSERT job (queued); trigger sends NOTIFY snapshot_jobs
-               ◀─ 202 Accepted { snapshot id }
-
-Python worker ──▶ LISTEN snapshot_jobs (plus a 30–60 s poll as a fallback)
-               ├─ claims job (FOR UPDATE SKIP LOCKED); snapshot → processing
-               ├─ computes with Google Earth Engine (the methodology's plugin, found by app/registry.py)
-               └─ one transaction: INSERT measurements, sources and flags,
-                  snapshot → completed (record_hash set by a Postgres function)
-                  or failed with a reason, or job retried with backoff
-               └─ when idle: renders the NDVI map image of completed snapshots
-
-Frontend ──▶ Go API: GET /snapshots/{id}   (status, measurements, sources)
-```
-
-The job queue lives in Postgres, so there is no extra infrastructure, and a snapshot can never exist without its job. Jobs left `processing` past their lock expiry (a crashed worker) are claimed again.
-
-### Life of a snapshot
-
-![Sequence of a snapshot from request to sealed result](docs/diagrams/architecture-2.svg)
-
-### Integrity: hash chain
-
-When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its inputs and outputs in a fixed order (snapshot and parcel IDs, methodology and version, sorted parameters, dates, geometry hashes, completion time, sorted measurements, sorted sources with their versions, sorted quality flags). The hash also includes the hash of the **same parcel's previous record** (`prev_record_hash`), forming a chain like git commits. Each parcel has its own chain: its first record links to the genesis hash (64 zeros), and nothing links across parcels, so one parcel's history can be verified without anyone else's records.
-
-- The hash is computed by a Postgres function when a snapshot becomes `completed`, so there is one implementation, independent of which service wrote the row. Verification uses the same function.
-- The full data is still stored. The hash adds tamper evidence, not compression.
-- Changing any stored value no longer matches its hash, and breaks every later hash of that parcel.
-- `verify_parcel_chain(parcel_id)` recomputes one parcel's chain; `verify_snapshot_chain()` checks every parcel. Each reports every record that does not match. A per-parcel head (`parcel_chain_heads`) remembers each chain's length, so records removed from its end are caught too. There is no API endpoint for them yet.
-- Records sealed before per-parcel chains (migration 015) linked to whichever snapshot completed before them, of any parcel. They keep verifying in that closed global chain, and each parcel's chain continues from its latest such record.
-- Records keep the format they were sealed with (`record_format`), so old hashes still verify when the format changes. New records use format v4 (parameters, source versions, flags, the manifest hash and the worker's code version); series use series format v2.
-- **Series:** each window is sealed as its own snapshot. When the last window finishes, a trigger seals the series with one hash over its settings and every window's result in date order, so a window can't be dropped later. Series hashes are stored on the series, not in the snapshot chain.
-- The NDVI map image is a picture of the evidence and is not part of the hash.
-- A parcel chain can't show that a parcel's newest records, or the whole parcel, were deleted by someone with database access. Planned: a periodic checkpoint hashing every parcel's head, published externally (e.g. OpenTimestamps), which also proves the history existed at that time. No blockchain or Web3 is required.
-
-### Planned schema
-
-The schema as built is in [backend/go-api/migrations](backend/go-api/migrations), one numbered file per change.
-
-| Change | Purpose |
+| Doc | Covers |
 |---|---|
-| `parcel_access` | Sharing parcels with auditors |
-| `snapshots.requested_by` | Who ran each snapshot |
-| `audit_events` | Append-only log of who did what and when |
-| Chain checkpoints | A periodic hash over every parcel's chain head, published outside the database |
+| [docs/development.md](docs/development.md) | Full setup, every setting, tests, project structure |
+| [docs/api.md](docs/api.md) | Endpoints, limits and errors |
+| [docs/architecture.md](docs/architecture.md) | Concepts, the snapshot pipeline, the hash chain, the Go ↔ Python contract, plugins |
+| [docs/deploy.md](docs/deploy.md) | Free-tier deployment on Vercel, Render and Supabase |
+| [docs/roadmap.md](docs/roadmap.md) | Phases, open decisions, planned work |
+| [docs/design/multi-analysis.md](docs/design/multi-analysis.md) | Proposal: many analyses as plugins |
 
-### Go ↔ Python contract: the database
+## Licence note
 
-There is no HTTP API between the services. The contract is which tables each one reads and writes.
-
-| | Go API | Python worker (`gee_worker` role) |
-|---|---|---|
-| `users`, `parcels`, `parcel_access` | read / write | no access |
-| `methodologies`, `methodology_parameters`, `measurement_types` | read / write | read |
-| `snapshots` | insert (pending), read | read; changed only through the queue functions |
-| `snapshot_jobs` | insert (with the snapshot, same transaction) | read; changed only through the queue functions |
-| `measurements`, `imagery_sources`, `snapshot_flags`, `snapshot_ndvi_images` | read | read, insert |
-| `snapshot_series` | insert, read | no direct access; sealed by a trigger |
-
-The worker has no direct `UPDATE` rights. It drives jobs through four functions, each of which checks that it still holds the job's lock:
-
-| Function | Does |
-|---|---|
-| `claim_snapshot_job(worker, lock_for)` | Claims the next due job (or one abandoned by a dead worker) and returns its inputs: job and snapshot IDs, attempt, methodology, dates, parameters, GeoJSON geometry. No row means nothing to do. |
-| `extend_snapshot_job_lock(job, worker, lock_for)` | Heartbeat during long computations. |
-| `complete_snapshot_job(job, worker, code_version)` | Called last, in the transaction that inserted the results. Records the worker's code version, completes the snapshot (the hash trigger stamps it) and returns `record_hash`. |
-| `fail_snapshot_job(job, worker, code, message, retryable)` | Retryable: re-queued with backoff (1, 2, 4… minutes, at most 1 hour) until `max_attempts`. Otherwise the job and snapshot fail with the code and message. |
-
-`worker` must be unique per running process. A worker whose lock expired and was taken over by another is refused, so two workers can never both save a result. The `gee_worker` role is created without a password; set one by hand with `ALTER ROLE gee_worker PASSWORD '...'`.
-
-The worker reads its inputs from the snapshot row itself: the frozen `parcel_geometry` (not the live parcel), the date range, the parameters and the methodology. The database triggers that freeze snapshot inputs and completed snapshots apply to both services.
-
-Failures are recorded on the job and snapshot with a code. Terminal: `NO_IMAGERY`, `NO_CLEAR_PIXELS`, `COMPUTATION_TOO_LARGE` (over Earth Engine's limit for one request), `UNSUPPORTED_METHODOLOGY`, `GEE_ERROR` (snapshot → `failed`). Retryable: `GEE_QUOTA`, `GEE_TIMEOUT`, `UPSTREAM_ERROR` (job re-queued with backoff).
-
-Each methodology's code is a plugin in `app/plugins/<name>/`, found automatically by `app/registry.py` and keyed by slug. At startup the worker compares every plugin's manifest with `methodologies` and `methodology_parameters` and exits if they differ, so jobs wait in the queue instead of failing. A new methodology or parameter is added with a migration.
-
-### Correctness rules
-
-1. Never report a value without clear pixels: the snapshot fails with `NO_IMAGERY` or `NO_CLEAR_PIXELS`, never `0`. Every result includes `valid_pixel_pct`. Below `min_clear_pct` the snapshot still completes, with a sealed `low_coverage` flag.
-2. Record **every** scene that went into the composite.
-3. Store all timestamps as UTC ISO-8601.
-4. Measure area on the Earth's actual surface (geography), matching PostGIS `area_ha`.
-5. Normalize geometry (fixed precision, consistent winding) before hashing.
-
-### Phases
-
-| Phase | Delivers |
-|---|---|
-| **0. Foundations** | ✅ Ownership, MultiPolygon parcels, GeoJSON, auth, roles, methodology seed |
-| **1. One snapshot end to end** | ✅ Queue, hash chain, worker on Earth Engine, snapshot endpoints |
-| **2. Hardening** | ✅ Retries with backoff, stuck-job recovery, integration tests and CI on PostGIS, rate-limited logins and sign-ups, per-user snapshot limits, duplicate requests answered with the queued snapshot, one hash chain per parcel. Remaining: mock Earth Engine, chain checkpoints |
-| **3. Frontend** | ✅ Overview, parcels, register parcel, parcel detail, snapshot audit view, NDVI map, time series |
-| **4. Analysis plugins** | In progress: plugin folders, manifests, generic parameters, record format v4 (manifest hash and worker code version). Next: artifacts, a second plugin |
-| **5. Change analysis** | Per-pixel difference maps, area-based measurements, same-season comparisons |
-| **6. Breadth** | Scheduled monitoring, PDF audit export, auditor sharing, passkeys/SSO |
-
-### Open decisions
-
-- **Permissions**: proposed: asset holders run snapshots on their own parcels; auditors view and re-run parcels shared with them.
-- **Artifact storage** (needed from Phase 4): Google Cloud Storage or local disk in development.
-- **Earth Engine licence**: free for non-commercial use only; a commercial product needs a paid licence.
-
-## Proposed: analysis plugins
-
-**Status: partly built** (see [Build order](#build-order)). Goal: add analyses (rainfall, phenology, water history, terrain, EUDR) without touching the core each time. The proposed design (components, evidence layers, data model, the plugin contract and the planned tables) is in [docs/design/multi-analysis.md](docs/design/multi-analysis.md); today's system is in [docs/architecture.md](docs/architecture.md).
-
-Built so far: plugin folders with auto-discovery, manifests checked against the database at startup, generic parameters through the API and worker, source versions and quality flags in record format v3, and the worker's code version and the manifest hash in record format v4. The image table and the frontend still assume NDVI.
-
-### What a plugin is
-
-```text
-backend/gee-service/app/plugins/
-├── ndvi_s2_median/
-│   ├── manifest.py    name, version, parameters, outputs, datasets, data start date
-│   ├── compute.py     the calculation
-│   ├── render.py      map image (optional)
-│   └── test_plugin.py
-└── chirps_rain_season/
-```
-
-The manifest describes the plugin; migrations publish the same values to `methodologies` and `methodology_parameters`, and the worker refuses to start if the two differ. The Go API validates requests against `methodology_parameters`, and the frontend will build its form and help text from it. Go and Python still only meet in Postgres. A plugin that uses an existing output type (value, time series, map, events) needs no Go or frontend change.
-
-Plugins live in this repo and are reviewed like other code. They are not installed at runtime, because sealed records are only trustworthy if the code behind them is known.
-
-### Versions and hashes
-
-Versions and hashes do different jobs, so both stay. A version **names** what ran; a hash **proves** a record hasn't changed.
-
-| Thing | Version | Hash | Why |
-|---|---|---|---|
-| Methodology / plugin | ✅ `1.0.0` | ✅ manifest hash, sealed into each record (format v4) | A version is only a label; the hash catches a recipe changed without a new version |
-| Plugin code | ✅ with the plugin | ✅ worker's git commit, sealed into each record (format v4) | Shows exactly which code ran |
-| Datasets | ✅ collection ID and version | ❌ | Too large to hash; they can be reprocessed, so the version must be stored |
-| Parameters | ❌ | ✅ inside the record hash | Chosen per snapshot |
-| Snapshot, series, analysis, report | ❌ | ✅ | These are the evidence |
-| Record format | ✅ `record_format` | ❌ | Old records must keep verifying under their own format |
-| Map images and other artifacts | ❌ | ✅ SHA-256, once they become `artifacts` | Today's NDVI image isn't hashed |
-
-The worker refuses to start if a manifest differs from what is published under the same version: changing a calculation means a new version, and old records stay reproducible.
-
-### Adding a methodology
-
-What exists today, and what the proposal adds.
-
-![Built and planned extension points](docs/diagrams/architecture-3.svg)
-
-### Build order
-
-1. ✅ Plugin folders, auto-discovery and manifests; NDVI moved onto them with no change in behaviour.
-2. ✅ Generic parameters, source versions, quality flags; record format v3. Code version and manifest hash sealed in record format v4.
-3. `series_points` and `artifacts`; methodology-aware frontend views.
-4. Second plugin, `chirps-rain-season`, end to end.
-5. Prototype water history and rainfall-adjusted residuals on parcels with known ground truth.
-6. Analyses and batch exports, then reports.
+The free tiers used here, and Earth Engine's free quota, are for noncommercial use. A commercial product needs a paid Earth Engine licence.
