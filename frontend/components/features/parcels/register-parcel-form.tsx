@@ -75,7 +75,7 @@ const RegisterParcelForm = () => {
             name="name"
             required
             maxLength={200}
-            placeholder="e.g. Nyeri Block A"
+            placeholder="e.g. Plot 14, Riverside Block"
             defaultValue={state.values?.name}
             aria-invalid={state.fieldErrors?.name ? true : undefined}
             className={`${inputClass} ${state.fieldErrors?.name ? 'border-danger' : ''}`}
@@ -91,7 +91,7 @@ const RegisterParcelForm = () => {
             id="region"
             name="region"
             maxLength={200}
-            placeholder="e.g. Nyeri County, Kenya"
+            placeholder="e.g. County or district, country"
             defaultValue={state.values?.region}
             className={inputClass}
           />
