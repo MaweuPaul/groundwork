@@ -45,10 +45,9 @@ Frontend ──▶ Go API: POST /parcels/{id}/snapshots
 Python worker ──▶ LISTEN snapshot_jobs (plus a 30–60 s poll as a fallback)
                ├─ claims job (FOR UPDATE SKIP LOCKED); snapshot → processing
                ├─ computes with Google Earth Engine (the methodology's plugin, found by app/registry.py)
-               └─ one transaction: INSERT measurements, sources and flags,
-                  snapshot → completed (record_hash set by a Postgres function)
-                  or failed with a reason, or job retried with backoff
-               └─ when idle: renders the NDVI map image of completed snapshots
+               └─ one transaction: INSERT measurements, sources, flags and artifacts
+                  (e.g. the NDVI map image), snapshot → completed (record_hash set by a
+                  Postgres function), or failed with a reason, or job retried with backoff
 
 Frontend ──▶ Go API: GET /snapshots/{id}   (status, measurements, sources)
 ```
@@ -73,9 +72,9 @@ When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its
 - Changing any stored value no longer matches its hash, and breaks every later hash of that parcel.
 - `verify_parcel_chain(parcel_id)` recomputes one parcel's chain; `verify_snapshot_chain()` checks every parcel. Each reports every record that does not match. A per-parcel head (`parcel_chain_heads`) remembers each chain's length, so records removed from its end are caught too. There is no API endpoint for them yet.
 - Records sealed before per-parcel chains (migration 015) linked to whichever snapshot completed before them, of any parcel. They keep verifying in that closed global chain, and each parcel's chain continues from its latest such record.
-- Records keep the format they were sealed with (`record_format`), so old hashes still verify when the format changes. New records use format v4 (parameters, source versions, flags, the manifest hash and the worker's code version); series use series format v2.
+- Records keep the format they were sealed with (`record_format`), so old hashes still verify when the format changes. New records use format v5 (parameters, source versions, flags, the manifest hash, the worker's code version and artifacts); series use series format v2.
 - **Series:** each window is sealed as its own snapshot. When the last window finishes, a trigger seals the series with one hash over its settings and every window's result in date order, so a window can't be dropped later. Series hashes are stored on the series, not in the snapshot chain.
-- The NDVI map image is a picture of the evidence and is not part of the hash.
+- **Artifacts** (format v5): files a methodology produces with its result, like the NDVI map image, are stored before completion and sealed one line each: key, media type, and SHA-256 of the content and of the metadata (e.g. where the image is drawn), both computed by the database. If the image can't be drawn the snapshot still completes, with a sealed `map_image_failed` flag. Images of earlier snapshots were drawn after sealing and are marked as not sealed.
 - A parcel chain can't show that a parcel's newest records, or the whole parcel, were deleted by someone with database access. Planned: a periodic checkpoint hashing every parcel's head, published externally (e.g. OpenTimestamps), which also proves the history existed at that time. No blockchain or Web3 is required.
 
 ### Go ↔ Python contract: the database
@@ -88,7 +87,7 @@ There is no HTTP API between the services. The contract is which tables each one
 | `methodologies`, `methodology_parameters`, `measurement_types` | read / write | read |
 | `snapshots` | insert (pending), read | read; changed only through the queue functions |
 | `snapshot_jobs` | insert (with the snapshot, same transaction) | read; changed only through the queue functions |
-| `measurements`, `imagery_sources`, `snapshot_flags`, `snapshot_ndvi_images` | read | read, insert |
+| `measurements`, `imagery_sources`, `snapshot_flags`, `artifacts` | read | read, insert |
 | `snapshot_series` | insert, read | no direct access; sealed by a trigger |
 
 The worker has no direct `UPDATE` rights. It drives jobs through four functions, each of which checks that it still holds the job's lock:
@@ -146,7 +145,7 @@ Versions and hashes do different jobs, so both stay. A version **names** what ra
 | Parameters | ❌ | ✅ inside the record hash | Chosen per snapshot |
 | Snapshot, series, analysis, report | ❌ | ✅ | These are the evidence |
 | Record format | ✅ `record_format` | ❌ | Old records must keep verifying under their own format |
-| Map images and other artifacts | ❌ | ✅ SHA-256, once they become `artifacts` | Today's NDVI image isn't hashed |
+| Map images and other artifacts | ❌ | ✅ SHA-256 of content and metadata, sealed into each record (format v5) | Shows the picture is the one computed with the result |
 
 The worker refuses to start if a manifest differs from what is published under the same version: changing a calculation means a new version, and old records stay reproducible.
 

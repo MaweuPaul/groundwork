@@ -1,17 +1,11 @@
 import pytest
 
 from app.errors import JobError
-from app.registry import PLUGINS, plugin_for, renderable_slugs
+from app.registry import PLUGINS, plugin_for
 
 
-def test_ndvi_is_registered_with_a_map_image():
-    plugin = plugin_for("ndvi-s2-median")
-    assert plugin.compute is not None
-    assert plugin.render is not None
-
-
-def test_ndvi_is_renderable():
-    assert "ndvi-s2-median" in renderable_slugs()
+def test_ndvi_is_registered():
+    assert plugin_for("ndvi-s2-median").compute is not None
 
 
 def test_unknown_methodology_fails_permanently():

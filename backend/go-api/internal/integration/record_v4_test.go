@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -37,8 +38,8 @@ func TestRecordSealsManifestAndCodeVersion(t *testing.T) {
 
 	text := recordText(t, tx, id)
 	lines := strings.Split(text, "\n")
-	if lines[0] != "groundwork-snapshot-v4" {
-		t.Fatalf("record starts with %q, want v4", lines[0])
+	if want := fmt.Sprintf("groundwork-snapshot-v%d", currentFormat); lines[0] != want {
+		t.Fatalf("record starts with %q, want %q", lines[0], want)
 	}
 	for _, want := range []string{"manifest_sha256=" + manifestHash, "code_version=" + codeVersion} {
 		if !strings.Contains(text, "\n"+want+"\n") {

@@ -8,8 +8,14 @@ import type { Snapshot } from '@/lib/types';
 // The previous hash of a parcel's first record: its chain starts here.
 const GENESIS = '0'.repeat(64);
 
+const artifactLabels: Record<string, string> = { ndvi_map: 'Map image' };
+const artifactLabel = (key: string) => artifactLabels[key] ?? key.replaceAll('_', ' ');
+
 // What each record format seals, matching snapshot_record_text() in the database.
 function coveredBy(format: number) {
+  if (format >= 5) {
+    return 'the methodology manifest and the exact worker code that ran, the inputs and every parameter, the frozen boundary, every measurement, every source with the version it was read at, any quality flags, every artifact such as the map image';
+  }
   if (format >= 4) {
     return 'the methodology manifest and the exact worker code that ran, the inputs and every parameter, the frozen boundary, every measurement, every source with the version it was read at, any quality flags';
   }
@@ -64,6 +70,14 @@ const IntegrityPanel = ({ snapshot }: { snapshot: Snapshot }) => {
             <HashRow label="Boundary hash" value={snapshot.geometry_hash} />
             {snapshot.manifest_sha256 && <HashRow label="Manifest hash" value={snapshot.manifest_sha256} />}
             {snapshot.code_version && <HashRow label="Worker code (git)" value={snapshot.code_version} />}
+            {snapshot.artifacts?.map((a) => (
+              <HashRow
+                key={a.key}
+                label={`${artifactLabel(a.key)} (SHA-256)`}
+                value={a.sha256}
+                note={a.sealed ? undefined : 'Not sealed: drawn after this record was sealed'}
+              />
+            ))}
           </div>
           <p className="text-caption text-muted-foreground">
             Sealed {snapshot.completed_at && <LocalTime iso={snapshot.completed_at} />} as record #{snapshot.parcel_seq} of {snapshot.parcel_name} (format

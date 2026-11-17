@@ -34,7 +34,7 @@ func TestParametersAreResolvedAndMirrored(t *testing.T) {
 			t.Errorf("parameter %s = %v, want %v", name, row.Parameters[name], value)
 		}
 	}
-	if row.MaxSceneCloudPct != 60 || row.CloudScoreThreshold != 0.6 || row.RecordFormat != 4 {
+	if row.MaxSceneCloudPct != 60 || row.CloudScoreThreshold != 0.6 || row.RecordFormat != currentFormat {
 		t.Errorf("legacy columns %v / %v, format %d", row.MaxSceneCloudPct, row.CloudScoreThreshold, row.RecordFormat)
 	}
 }

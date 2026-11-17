@@ -2,7 +2,7 @@ from datetime import date
 from types import SimpleNamespace
 from uuid import uuid4
 
-from app import images, queue, registry, worker
+from app import queue, registry, worker
 from app.contract import Manifest, Measurement, Plugin, Result
 from app.models import Job
 
@@ -34,12 +34,3 @@ def test_process_handles_a_plugin_with_its_own_measurements(monkeypatch):
     worker.process(None, SETTINGS, job())
 
     assert saved == [(result, "abc123")]
-
-
-
-def test_render_only_asks_for_plugins_with_a_map_image(monkeypatch):
-    asked = []
-    monkeypatch.setattr(registry, "renderable_slugs", lambda: ["with-map"])
-    monkeypatch.setattr(images, "next_missing", lambda conn, slugs: asked.append(slugs))
-    assert worker.render_next_image(None) is False
-    assert asked == [["with-map"]]

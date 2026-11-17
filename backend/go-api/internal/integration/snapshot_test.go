@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -55,14 +56,14 @@ func TestSnapshotLifecycleSealsRecordV4(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if row.Status != "completed" || row.RecordFormat != 4 {
-		t.Fatalf("status %s, format %d; want completed, 4", row.Status, row.RecordFormat)
+	if row.Status != "completed" || row.RecordFormat != currentFormat {
+		t.Fatalf("status %s, format %d; want completed, %d", row.Status, row.RecordFormat, currentFormat)
 	}
 	if row.RecordHash != hash || row.Recomputed != hash {
 		t.Errorf("stored %s, recomputed %s, returned %s: all three must match", row.RecordHash, row.Recomputed, hash)
 	}
 	for _, line := range []string{
-		"groundwork-snapshot-v4",
+		fmt.Sprintf("groundwork-snapshot-v%d", currentFormat),
 		"code_version=" + codeVersion,
 		"param=cloud_score_threshold:0.600000000",
 		"param=max_scene_cloud_pct:20.000000000",

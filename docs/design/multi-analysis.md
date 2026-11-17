@@ -1,6 +1,6 @@
 # Design: Groundwork as a multi-analysis platform
 
-Status: **partly built.** Steps 1 and 2 of the [build order](#build-order) are in place; the rest is a proposal. Today's system is in [../architecture.md](../architecture.md).
+Status: **partly built.** Steps 1 and 2 of the [build order](#build-order) and the artifacts of step 3 are in place; the rest is a proposal. Today's system is in [../architecture.md](../architecture.md).
 Goal: add new analyses (rainfall, phenology, water history, terrain, EUDR...) without
 touching the core each time, while every result stays sealed and reproducible.
 
@@ -38,15 +38,15 @@ way down to individual satellite scenes.
 | `methodology_outputs` | Declared outputs: key, kind, unit, native resolution |
 | `snapshots`: `quality` | Can be `insufficient_resolution`. Built: `parameters` and source versions (format v3), `code_version` (format v4); quality flags live in `snapshot_flags` |
 | `series_points` | Dated values; a missing observation is null, never 0 |
-| `artifacts` | Replaces `snapshot_ndvi_images`; adds media type and SHA-256 |
+| `artifacts` | Built (migration 016): replaces `snapshot_ndvi_images`, with media type and SHA-256, sealed in record format v5 |
 | `analyses`, `analysis_inputs` | Sealed results built over other sealed records, e.g. RESTREND |
 | `reports`, `report_items` | Bundles for buyers, lenders and exporters, worded as evidence, not certification |
 | `reference_areas` | Frozen, hashed areas for peer benchmarks |
 | Earth Engine batch exports | Jobs over the 5-minute limit for one request |
 
 Migration path: the cloud columns already became NDVI's `parameters` (record format v3).
-Still to do: `snapshot_ndvi_images` becomes `artifacts`. Existing records keep the format they
-were sealed with and still verify.
+`snapshot_ndvi_images` became `artifacts` (format v5); the old table is dropped once no running
+service reads it. Existing records keep the format they were sealed with and still verify.
 
 ## 4. How a combined analysis runs (rainfall-adjusted productivity)
 
@@ -71,7 +71,7 @@ were sealed with and still verify.
 
 1. ✅ Plugin contract + parameter specs; NDVI moved onto it (refactor, no behaviour change).
 2. ✅ Generic `parameters`, dataset provenance, quality flags (record format v3); manifest hash and worker code version (format v4).
-3. `series_points` and `artifacts`; methodology-aware frontend views.
+3. ✅ `artifacts` (record format v5). Remaining: `series_points`, methodology-aware frontend views.
 4. Second plugin, `chirps-rain-season`, end to end.
 5. Prototype `water-history` and rainfall-adjusted residuals on parcels with known ground truth.
 6. Analyses and batch exports; then reports with fixed, reviewed wording.

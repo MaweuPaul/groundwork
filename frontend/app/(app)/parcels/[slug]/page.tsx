@@ -10,18 +10,6 @@ import Border from '@/components/shared/border';
 import LiveRefresh from '@/components/shared/live-refresh';
 import { getMethodologies, getParcel, getParcelSeries, getParcelSnapshots } from '@/lib/api';
 import { parcelPath, refFromSegment } from '@/lib/paths';
-import type { SnapshotSummary } from '@/lib/types';
-
-// The worker renders the map image shortly after completion; keep refreshing for a few
-// minutes so it appears. A render that failed never gets one, hence the time limit.
-function awaitingImage(s: SnapshotSummary) {
-  return (
-    s.status === 'completed' &&
-    !s.ndvi_image &&
-    !!s.completed_at &&
-    Date.now() - Date.parse(s.completed_at) < 10 * 60_000
-  );
-}
 
 export default async function ParcelPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -50,8 +38,6 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
 
   const inProgress = snapshots.data.some((s) => s.status === 'pending' || s.status === 'processing');
 
-  const imagePending = snapshots.data.some(awaitingImage);
-
   // Newest first, as the API returns them.
   const ndviLayers: NdviLayer[] = snapshots.data.flatMap((s) =>
     s.ndvi_image ? [{ shortId: s.short_id, label: `${s.date_start} → ${s.date_end}`, image: s.ndvi_image }] : [],
@@ -70,7 +56,7 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
 
   return (
     <main className="flex w-full flex-col gap-6 p-6">
-      <LiveRefresh active={inProgress || imagePending} />
+      <LiveRefresh active={inProgress} />
       <ParcelHeader parcel={parcel.data} methodologies={methodologies.data} />
 
       <div className="grid gap-6 lg:grid-cols-2">

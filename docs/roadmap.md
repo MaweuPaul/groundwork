@@ -8,7 +8,7 @@
 | **1. One snapshot end to end** | ✅ Queue, hash chain, worker on Earth Engine, snapshot endpoints |
 | **2. Hardening** | ✅ Retries with backoff, stuck-job recovery, integration tests and CI on PostGIS, rate-limited logins and sign-ups, per-user snapshot limits, duplicate requests answered with the queued snapshot, one hash chain per parcel. Remaining: mock Earth Engine, chain checkpoints |
 | **3. Frontend** | ✅ Overview, parcels, register parcel, parcel detail, snapshot audit view, NDVI map, time series |
-| **4. Analysis plugins** | In progress: plugin folders, manifests, generic parameters, record format v4 (manifest hash and worker code version). Next: artifacts, a second plugin |
+| **4. Analysis plugins** | In progress: plugin folders, manifests, generic parameters, record formats v4 (manifest hash, worker code version) and v5 (sealed artifacts). Next: a second plugin |
 | **5. Change analysis** | Per-pixel difference maps, area-based measurements, same-season comparisons |
 | **6. Breadth** | Scheduled monitoring, PDF audit export, auditor sharing, passkeys/SSO |
 
@@ -39,7 +39,7 @@ Built so far: plugin folders with auto-discovery, manifests checked against the 
 
 1. ✅ Plugin folders, auto-discovery and manifests; NDVI moved onto them with no change in behaviour.
 2. ✅ Generic parameters, source versions, quality flags; record format v3. Code version and manifest hash sealed in record format v4.
-3. `series_points` and `artifacts`; methodology-aware frontend views.
+3. ✅ `artifacts`, sealed in record format v5. Remaining: `series_points`, methodology-aware frontend views.
 4. Second plugin, `chirps-rain-season`, end to end.
 5. Prototype water history and rainfall-adjusted residuals on parcels with known ground truth.
 6. Analyses and batch exports, then reports.

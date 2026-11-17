@@ -1,5 +1,8 @@
 from app.contract import Manifest, Parameter
 
+# Sentinel-2's native resolution for the red and near-infrared bands; measuring and the map use it.
+SCALE_M = 10
+
 MANIFEST = Manifest(
     slug="ndvi-s2-median",
     version="1.0.0",

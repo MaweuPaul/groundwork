@@ -62,6 +62,7 @@ type SnapshotDetail struct {
 	Measurements   map[string]float64 `json:"measurements"` // type slug → value
 	ImagerySources []ImagerySourceRef `json:"imagery_sources"`
 	NdviImage      *NdviImageInfo     `json:"ndvi_image,omitempty"`
+	Artifacts      []ArtifactInfo     `json:"artifacts"`
 }
 
 // SnapshotJobInfo is the queue progress shown to the client. The worker's raw
@@ -85,7 +86,7 @@ type SnapshotRepository interface {
 	CreateWithJob(in NewSnapshot) (uuid.UUID, error)
 	GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDetail, error)
 	ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SnapshotSummary, error)
-	NdviPNGForOwner(id, ownerID uuid.UUID) ([]byte, error)
+	ArtifactForOwner(id, ownerID uuid.UUID, key string) (*Artifact, error)
 	CreateSeriesWithJobs(in NewSeries) (SeriesRef, error)
 	ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SeriesSummary, error)
 }
@@ -307,11 +308,12 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 		return nil, err
 	}
 
-	images, err := ndviImagesBySnapshot(r.db, []uuid.UUID{id})
+	artifacts, err := artifactsBySnapshot(r.db, []uuid.UUID{id})
 	if err != nil {
 		return nil, err
 	}
-	detail.NdviImage = images[id]
+	detail.Artifacts = artifactsOrEmpty(artifacts[id])
+	detail.NdviImage = ndviImage(detail.Artifacts)
 
 	return detail, nil
 }
@@ -382,7 +384,7 @@ func (r *snapshotRepository) ListByParcelForOwner(parcelID, ownerID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
-	images, err := ndviImagesBySnapshot(r.db, ids)
+	artifacts, err := artifactsBySnapshot(r.db, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +398,7 @@ func (r *snapshotRepository) ListByParcelForOwner(parcelID, ownerID uuid.UUID) (
 		if snapshots[i].Measurements == nil {
 			snapshots[i].Measurements = map[string]float64{}
 		}
-		snapshots[i].NdviImage = images[snapshots[i].ID]
+		snapshots[i].NdviImage = ndviImage(artifacts[snapshots[i].ID])
 	}
 
 	return snapshots, nil

@@ -16,5 +16,6 @@ func registerSnapshots(mux *http.ServeMux, a *app.App) {
 	mux.HandleFunc("GET /parcels/{id}/series", a.Snapshots.ListSeriesForParcel)
 	mux.HandleFunc("GET /snapshots/{id}", a.Snapshots.Get)
 	mux.HandleFunc("GET /snapshots/{id}/ndvi.png", a.Snapshots.NdviImage)
+	mux.HandleFunc("GET /snapshots/{id}/artifacts/{key}", a.Snapshots.Artifact)
 	mux.HandleFunc("GET /methodologies", a.Snapshots.ListMethodologies)
 }

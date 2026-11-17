@@ -34,7 +34,7 @@ func (f *fakeSnapshotRepo) ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]
 	return nil, nil
 }
 
-func (f *fakeSnapshotRepo) NdviPNGForOwner(id, ownerID uuid.UUID) ([]byte, error) {
+func (f *fakeSnapshotRepo) ArtifactForOwner(id, ownerID uuid.UUID, key string) (*repository.Artifact, error) {
 	return nil, nil
 }
 

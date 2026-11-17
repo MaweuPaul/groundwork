@@ -1,9 +1,8 @@
 """Snapshot worker: python -m app.worker
 
 Waits for snapshot jobs (LISTEN snapshot_jobs, with a fallback poll), computes each with
-Earth Engine, and saves the result or records the failure. When no job is due, it renders
-the map image of any completed snapshot that lacks one. Run several for more
-throughput; SKIP LOCKED in claim_snapshot_job keeps them off each other's jobs.
+Earth Engine, and saves the result, with any artifacts such as the map image, or records the
+failure. Run several for more throughput; SKIP LOCKED in claim_snapshot_job keeps them off each other's jobs.
 """
 
 import logging
@@ -12,7 +11,7 @@ import time
 
 import psycopg
 
-from app import earth_engine, images, manifests, queue, registry
+from app import earth_engine, manifests, queue, registry
 from app.config import ConfigError, Settings, load_settings
 from app.errors import JobError, classify
 from app.models import Job
@@ -40,8 +39,8 @@ def process(conn: psycopg.Connection, settings: Settings, job: Job) -> None:
         return
 
     log.info(
-        "job %s: completed, %d measurements, %d scenes, record %s",
-        job.job_id, len(result.measurements), len(result.scenes), record_hash,
+        "job %s: completed, %d measurements, %d scenes, %d artifacts, record %s",
+        job.job_id, len(result.measurements), len(result.scenes), len(result.artifacts), record_hash,
     )
 
 
@@ -62,23 +61,6 @@ def drain(conn: psycopg.Connection, settings: Settings) -> None:
         process(conn, settings, job)
 
 
-def render_next_image(conn: psycopg.Connection) -> bool:
-    """Renders one missing map image. Returns False when there was none to render."""
-    req = images.next_missing(conn, registry.renderable_slugs())
-    if req is None:
-        return False
-    try:
-        image = registry.plugin_for(req.methodology_slug).render(req)
-    except Exception as exc:
-        error = classify(exc)
-        log.warning("snapshot %s: map image failed: %s", req.snapshot_id, error)
-        images.save_error(conn, req, str(error))
-        return True
-    images.save(conn, req, image)
-    log.info("snapshot %s: map image %dx%d, %d KB", req.snapshot_id, image.width, image.height, len(image.png) // 1024)
-    return True
-
-
 def serve(settings: Settings) -> None:
     while True:
         try:
@@ -87,9 +69,6 @@ def serve(settings: Settings) -> None:
                 log.info("worker %s listening for jobs", settings.worker_id)
                 while True:
                     drain(conn, settings)
-                    # One image at a time, so a newly queued job never waits behind a backlog.
-                    if render_next_image(conn):
-                        continue
                     # Returns on the first NOTIFY, or after the poll interval (for retries
                     # whose backoff has passed, and anything missed while busy).
                     for _ in conn.notifies(timeout=settings.poll_seconds, stop_after=1):
