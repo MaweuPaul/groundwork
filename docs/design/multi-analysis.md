@@ -1,6 +1,6 @@
-# Design: Groundwork as a multi-analysis platform (proposal)
+# Design: Groundwork as a multi-analysis platform
 
-Status: **proposal**, not built. Today's system is in [../architecture.md](../architecture.md).
+Status: **partly built.** Steps 1 and 2 of the [build order](#build-order) are in place; the rest is a proposal. Today's system is in [../architecture.md](../architecture.md).
 Goal: add new analyses (rainfall, phenology, water history, terrain, EUDR...) without
 touching the core each time, while every result stays sealed and reproducible.
 
@@ -44,9 +44,9 @@ way down to individual satellite scenes.
 | `reference_areas` | Frozen, hashed areas for peer benchmarks |
 | Earth Engine batch exports | Jobs over the 5-minute limit for one request |
 
-Migration path: the current `max_scene_cloud_pct` / `cloud_score_threshold` columns become
-NDVI's `parameters`; `snapshot_ndvi_images` becomes `artifacts`; existing records keep their
-v1/v2 hash formats and still verify.
+Migration path: the cloud columns already became NDVI's `parameters` (record format v3).
+Still to do: `snapshot_ndvi_images` becomes `artifacts`. Existing records keep the format they
+were sealed with and still verify.
 
 ## 4. How a combined analysis runs (rainfall-adjusted productivity)
 
@@ -60,7 +60,8 @@ v1/v2 hash formats and still verify.
 
 <sub>Source: [multi-analysis-5.mmd](../diagrams/multi-analysis-5.mmd)</sub>
 
-- `parameter_spec` drives the API validation **and** the frontend form: one source of truth.
+- The parameter spec drives the API validation **and** the frontend form: one source of truth.
+  Built as `methodology_parameters`, checked against each plugin's manifest at worker startup.
 - `validate` enforces the minimum-pixel rule: a 9 km dataset on a 2 ha parcel returns
   `insufficient_resolution` instead of a number.
 - `compute` may run interactively or start a batch export; the runner handles both.
@@ -68,8 +69,8 @@ v1/v2 hash formats and still verify.
 
 ## Build order
 
-1. Plugin contract + parameter specs in `methodologies`; NDVI moved onto it (refactor, no behaviour change).
-2. Generic `parameters`, dataset provenance, quality flags; record format v3.
+1. ✅ Plugin contract + parameter specs; NDVI moved onto it (refactor, no behaviour change).
+2. ✅ Generic `parameters`, dataset provenance, quality flags (record format v3); manifest hash and worker code version (format v4).
 3. `series_points` and `artifacts`; methodology-aware frontend views.
 4. Second plugin, `chirps-rain-season`, end to end.
 5. Prototype `water-history` and rainfall-adjusted residuals on parcels with known ground truth.
