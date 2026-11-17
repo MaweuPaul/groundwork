@@ -112,10 +112,19 @@ func claim(t *testing.T, tx *gorm.DB, as string) *claimedJob {
 	return &jobs[0]
 }
 
+// currentFormat is the record format new snapshots are sealed with.
+const currentFormat = 5
+
 type result struct {
 	Measurements map[string]float64
 	Sources      []string // asset URIs, all at version "v1"
 	Flags        map[string]string
+	Artifacts    []artifact
+}
+
+type artifact struct {
+	Key, MediaType, Metadata string
+	Content                  []byte
 }
 
 var clearResult = result{
@@ -151,6 +160,12 @@ func save(t *testing.T, tx *gorm.DB, snapshotID uuid.UUID, r result) {
 		if err := tx.Exec(`INSERT INTO snapshot_flags (snapshot_id, flag, detail) VALUES (?, ?, ?)`,
 			snapshotID, flag, detail).Error; err != nil {
 			t.Fatalf("insert flag %s: %v", flag, err)
+		}
+	}
+	for _, a := range r.Artifacts {
+		if err := tx.Exec(`INSERT INTO artifacts (snapshot_id, key, media_type, content, metadata) VALUES (?, ?, ?, ?, ?::jsonb)`,
+			snapshotID, a.Key, a.MediaType, a.Content, a.Metadata).Error; err != nil {
+			t.Fatalf("insert artifact %s: %v", a.Key, err)
 		}
 	}
 }

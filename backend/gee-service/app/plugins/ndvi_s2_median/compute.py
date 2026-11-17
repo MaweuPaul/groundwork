@@ -8,6 +8,7 @@ A snapshot with less than min_clear_pct clear pixels still completes, flagged lo
 """
 
 import json
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -16,11 +17,11 @@ import ee
 from app.contract import Measurement, Result, Scene
 from app.errors import JobError
 from app.models import Job, Methodology
-from app.plugins.ndvi_s2_median.manifest import MANIFEST
+from app.plugins.ndvi_s2_median import render
+from app.plugins.ndvi_s2_median.manifest import MANIFEST, SCALE_M
 
 S2_COLLECTION = "COPERNICUS/S2_SR_HARMONIZED"
 CLOUD_SCORE_COLLECTION = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"
-SCALE_M = 10
 PROVIDER = "Copernicus Sentinel-2 via Google Earth Engine"
 PROCESSING_LEVEL = "L2A"
 
@@ -116,7 +117,17 @@ def run(job: Job, methodology: Methodology) -> Result:
         }
     ).getInfo()
 
-    return summarize(info, job)
+    return with_map_image(summarize(info, job), geometry, job.geometry_geojson, composite)
+
+
+def with_map_image(result: Result, geometry: ee.Geometry, geojson: str, composite: ee.Image) -> Result:
+    """Adds the NDVI map image, which is part of the evidence but not of the measurement: if
+    drawing it fails, the snapshot still completes, with a sealed flag saying so."""
+    try:
+        image = render.map_image(geometry, geojson, composite)
+    except Exception as exc:
+        return replace(result, flags={**result.flags, "map_image_failed": str(exc)[:500]})
+    return replace(result, artifacts=[*result.artifacts, image])
 
 
 def summarize(info: dict[str, Any], job: Job) -> Result:

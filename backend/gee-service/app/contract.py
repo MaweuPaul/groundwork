@@ -2,9 +2,8 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any
-from uuid import UUID
 
 from app.models import Job, Methodology
 
@@ -48,43 +47,27 @@ class Scene:
 
 
 @dataclass(frozen=True)
+class Artifact:
+    """A file the methodology produces with its result, e.g. a map image. Stored with the
+    measurements and sealed into the record (format v5): the database hashes the content and
+    the metadata itself."""
+
+    key: str  # e.g. "ndvi_map"; lower case, digits and underscores
+    media_type: str  # e.g. "image/png"
+    content: bytes
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class Result:
     measurements: dict[str, Measurement]
     scenes: list[Scene]
     # Quality flags, e.g. {"low_coverage": "42% clear, below 50%"}. Sealed; never change a value.
     flags: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class ImageRequest:
-    snapshot_id: UUID
-    methodology_slug: str
-    geometry_geojson: str
-    date_start: date
-    date_end: date
-    parameters: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class Bounds:
-    west: float
-    south: float
-    east: float
-    north: float
-
-
-@dataclass(frozen=True)
-class Rendered:
-    png: bytes
-    width: int
-    height: int
-    bounds: Bounds
-    visualization: dict
+    artifacts: list[Artifact] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class Plugin:
     manifest: Manifest
     compute: Callable[[Job, Methodology], Result]
-    # None when the methodology has no map image.
-    render: Callable[[ImageRequest], Rendered] | None = None

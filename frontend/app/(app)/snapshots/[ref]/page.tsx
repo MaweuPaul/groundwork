@@ -18,16 +18,10 @@ import { getMethodologies, getParcel, getSnapshot } from '@/lib/api';
 import { parcelPath, snapshotPath } from '@/lib/paths';
 import type { Snapshot } from '@/lib/types';
 
-// Keep refreshing while the worker is still busy with this snapshot: computing it, or
-// rendering its map image in the minutes after it completes.
+// Keep refreshing while the worker is still busy with this snapshot. Its map image is stored
+// with the result, so there's nothing to wait for once it completes.
 function stillWorking(s: Snapshot) {
-  if (s.status === 'pending' || s.status === 'processing') return true;
-  return (
-    s.status === 'completed' &&
-    !s.ndvi_image &&
-    !!s.completed_at &&
-    Date.now() - Date.parse(s.completed_at) < 10 * 60_000
-  );
+  return s.status === 'pending' || s.status === 'processing';
 }
 
 export default async function SnapshotPage({ params }: { params: Promise<{ ref: string }> }) {
@@ -110,7 +104,9 @@ export default async function SnapshotPage({ params }: { params: Promise<{ ref: 
               />
               {s.status === 'completed' && !s.ndvi_image && (
                 <p className="font-mono text-micro text-muted-foreground">
-                  The NDVI image is rendered shortly after completion and appears here automatically.
+                  {s.flags?.some((f) => f.flag === 'map_image_failed')
+                    ? 'The NDVI image could not be drawn for this snapshot; its measurements are unaffected.'
+                    : 'This snapshot has no NDVI image.'}
                 </p>
               )}
             </Border>

@@ -97,6 +97,11 @@ def save_and_complete(conn: psycopg.Connection, job: Job, worker: str, result: R
                 "INSERT INTO snapshot_flags (snapshot_id, flag, detail) VALUES (%s, %s, %s)",
                 [(job.snapshot_id, flag, detail) for flag, detail in result.flags.items()],
             )
+            # The database computes each artifact's hashes; the record seals them.
+            cur.executemany(
+                "INSERT INTO artifacts (snapshot_id, key, media_type, content, metadata) VALUES (%s, %s, %s, %s, %s)",
+                [(job.snapshot_id, a.key, a.media_type, a.content, Jsonb(a.metadata)) for a in result.artifacts],
+            )
 
         # Raises if another worker took the job over; the transaction then rolls back.
         (record_hash,) = conn.execute(

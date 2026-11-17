@@ -4,6 +4,7 @@ import type { SnapshotFlag } from '@/lib/types';
 
 const labels: Record<string, string> = {
   low_coverage: 'Low coverage',
+  map_image_failed: 'No map image',
 };
 
 export const flagLabel = (flag: string) => labels[flag] ?? flag.replaceAll('_', ' ');

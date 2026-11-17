@@ -101,6 +101,7 @@ export type Snapshot = {
   // Sealed from record format 4.
   code_version?: string;
   manifest_sha256?: string;
+  artifacts: Artifact[];
   created_at: string;
   started_at?: string;
   completed_at?: string;
@@ -229,4 +230,16 @@ export type ActivityEvent = {
   windows?: number;
   flags?: string[];
   detail?: string;
+};
+
+// A file a methodology produced with its result, e.g. the NDVI map image. Sealed into the
+// record from format 5; earlier snapshots' images were drawn after sealing.
+export type Artifact = {
+  key: string;
+  media_type: string;
+  sha256: string;
+  metadata_sha256: string;
+  byte_size: number;
+  metadata: Record<string, unknown>;
+  sealed: boolean;
 };

@@ -27,10 +27,6 @@ def discover()-> dict[str,Plugin]:
 PLUGINS = discover()
 
 
-def renderable_slugs() -> list[str]:
-    return [slug for slug, plugin in PLUGINS.items() if plugin.render is not None]
-
-
 def plugin_for(slug: str) -> Plugin:
     plugin = PLUGINS.get(slug)
     if plugin is None:

@@ -1,7 +1,7 @@
-"""The NDVI map image for a completed snapshot (migration 010).
+"""The NDVI map image, stored with the snapshot's result and sealed into its record.
 
-Re-builds the snapshot's composite from its stored inputs, colours it, clips it to the frozen
-boundary and fetches it as a PNG on a Web Mercator grid covering the boundary's bounding box.
+Colours the snapshot's composite, clips it to the frozen boundary and fetches it as a PNG on
+a Web Mercator grid covering the boundary's bounding box.
 The frontend stretches it between those bounds, so the projection has to match the map's.
 
 computePixels needs only the permission already used for measuring; thumbnail URLs would need
@@ -11,11 +11,12 @@ an extra Earth Engine role.
 import json
 import math
 import struct
+from dataclasses import dataclass
 
 import ee
 
-from app.contract import Bounds, ImageRequest, Rendered
-from app.plugins.ndvi_s2_median.compute import SCALE_M, build_composite, setting
+from app.contract import Artifact
+from app.plugins.ndvi_s2_median.manifest import SCALE_M
 
 # Sequential, light to dark: bare ground pale, dense vegetation dark. Lightness alone carries
 # the order, so it reads without colour vision and in greyscale.
@@ -25,6 +26,15 @@ NDVI_MAX = 0.9
 MAX_DIMENSION = 1024
 MIN_DIMENSION = 256
 EARTH_RADIUS_M = 6_378_137
+ARTIFACT_KEY = "ndvi_map"
+
+
+@dataclass(frozen=True)
+class Bounds:
+    west: float
+    south: float
+    east: float
+    north: float
 
 
 def bounds_of(geojson: str) -> Bounds:
@@ -83,17 +93,8 @@ def png_size(png: bytes) -> tuple[int, int]:
     return struct.unpack(">II", png[16:24])
 
 
-def render(req: ImageRequest) -> Rendered:
-    geometry = ee.Geometry(json.loads(req.geometry_geojson))
-    _, composite = build_composite(
-        geometry,
-        req.date_start,
-        req.date_end,
-        setting(req.parameters, "max_scene_cloud_pct"),
-        setting(req.parameters, "cloud_score_threshold"),
-    )
-
-    b = bounds_of(req.geometry_geojson)
+def map_image(geometry: ee.Geometry, geojson: str, composite: ee.Image) -> Artifact:
+    b = bounds_of(geojson)
     visualization = {"min": NDVI_MIN, "max": NDVI_MAX, "palette": [f"#{c}" for c in PALETTE]}
     png = ee.data.computePixels(
         {
@@ -104,4 +105,14 @@ def render(req: ImageRequest) -> Rendered:
     )
 
     width, height = png_size(png)
-    return Rendered(png=png, width=width, height=height, bounds=b, visualization=visualization)
+    return Artifact(
+        key=ARTIFACT_KEY,
+        media_type="image/png",
+        content=png,
+        metadata={
+            "width": width,
+            "height": height,
+            "bounds": [b.west, b.south, b.east, b.north],
+            "visualization": visualization,
+        },
+    )

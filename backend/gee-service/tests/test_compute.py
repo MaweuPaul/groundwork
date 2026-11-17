@@ -4,6 +4,8 @@ from uuid import uuid4
 
 import pytest
 
+from app.contract import Artifact
+from app.plugins.ndvi_s2_median import compute
 from app.plugins.ndvi_s2_median.compute import check_supported, end_exclusive, summarize
 from app.errors import JobError
 from app.models import Job, Methodology
@@ -130,3 +132,23 @@ def test_unsupported_methodology_is_terminal(change):
         check_supported(replace(METHODOLOGY, **change))
     assert err.value.code == "UNSUPPORTED_METHODOLOGY"
     assert not err.value.retryable
+
+
+def test_map_image_is_added_as_an_artifact(monkeypatch):
+    image = Artifact(key="ndvi_map", media_type="image/png", content=b"png", metadata={"width": 1})
+    monkeypatch.setattr(compute.render, "map_image", lambda geometry, geojson, composite: image)
+    result = compute.with_map_image(summarize(info(), JOB), None, "{}", None)
+    assert result.artifacts == [image]
+    assert "map_image_failed" not in result.flags
+
+
+def test_a_failed_map_image_is_flagged_and_the_snapshot_still_completes(monkeypatch):
+    def fail(geometry, geojson, composite):
+        raise RuntimeError("computePixels: too many pixels")
+
+    monkeypatch.setattr(compute.render, "map_image", fail)
+    measured = summarize(info(), JOB)
+    result = compute.with_map_image(measured, None, "{}", None)
+    assert result.artifacts == []
+    assert result.measurements == measured.measurements
+    assert result.flags["map_image_failed"] == "computePixels: too many pixels"

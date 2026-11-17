@@ -43,7 +43,7 @@ type CreateSnapshotInput struct {
 type SnapshotService interface {
 	CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, error)
 	GetSnapshot(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error)
-	GetNdviImage(id, ownerID uuid.UUID) ([]byte, error)
+	GetArtifact(id, ownerID uuid.UUID, key string) (*repository.Artifact, error)
 	ListParcelSnapshots(parcelID, ownerID uuid.UUID) ([]repository.SnapshotSummary, error)
 	ListMethodologies() ([]models.Methodology, error)
 	CreateSeries(in CreateSeriesInput) (repository.SeriesRef, error)
@@ -61,9 +61,9 @@ func NewSnapshotService(snapshots repository.SnapshotRepository, methodologies r
 	return &snapshotService{snapshots: snapshots, methodologies: methodologies, limits: limits, now: time.Now}
 }
 
-// GetNdviImage returns the snapshot's NDVI map PNG, or nil when there is none or it isn't the owner's.
-func (s *snapshotService) GetNdviImage(id, ownerID uuid.UUID) ([]byte, error) {
-	return s.snapshots.NdviPNGForOwner(id, ownerID)
+// GetArtifact returns one of the snapshot's artifacts, or nil when there is none or it isn't the owner's.
+func (s *snapshotService) GetArtifact(id, ownerID uuid.UUID, key string) (*repository.Artifact, error) {
+	return s.snapshots.ArtifactForOwner(id, ownerID, key)
 }
 
 // GetSnapshot returns nil, nil when the snapshot doesn't exist or isn't the owner's.

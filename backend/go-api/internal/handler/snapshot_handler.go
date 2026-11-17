@@ -124,30 +124,40 @@ func (h *SnapshotHandler) Get(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, snapshot)
 }
 
-// NdviImage serves the snapshot's NDVI map image (a PNG rendered by the worker after the
-// snapshot completed). 404 when there is none yet, or it isn't the caller's.
+// Artifact serves one of the snapshot's artifacts ({key}, e.g. ndvi_map) with its media type
+// and SHA-256. 404 when there is none, or it isn't the caller's.
+func (h *SnapshotHandler) Artifact(w http.ResponseWriter, r *http.Request) {
+	h.serveArtifact(w, r, r.PathValue("key"))
+}
+
+// NdviImage serves the NDVI map image: the ndvi_map artifact.
 func (h *SnapshotHandler) NdviImage(w http.ResponseWriter, r *http.Request) {
+	h.serveArtifact(w, r, repository.NdviMapKey)
+}
+
+func (h *SnapshotHandler) serveArtifact(w http.ResponseWriter, r *http.Request, key string) {
 	id, ok := resolveRef(w, r, h.refs.SnapshotID, "snapshot not found")
 	if !ok {
 		return
 	}
 
 	user := middleware.UserFrom(r.Context())
-	png, err := h.service.GetNdviImage(id, user.ID)
+	artifact, err := h.service.GetArtifact(id, user.ID, key)
 	if err != nil {
-		logging.From(r.Context()).Error("snapshots: ndvi image", "error", err)
+		logging.From(r.Context()).Error("snapshots: artifact", "key", key, "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 		return
 	}
-	if png == nil {
-		httpx.WriteError(w, http.StatusNotFound, "no NDVI image for this snapshot")
+	if artifact == nil {
+		httpx.WriteError(w, http.StatusNotFound, "no such artifact for this snapshot")
 		return
 	}
 
-	// An image never changes once rendered, but it's private to the owner.
-	w.Header().Set("Content-Type", "image/png")
+	// Artifacts never change once stored, but they're private to the owner.
+	w.Header().Set("Content-Type", artifact.MediaType)
 	w.Header().Set("Cache-Control", "private, max-age=86400")
-	w.Write(png)
+	w.Header().Set("X-Content-SHA256", artifact.SHA256)
+	w.Write(artifact.Content)
 }
 
 type createSeriesRequest struct {

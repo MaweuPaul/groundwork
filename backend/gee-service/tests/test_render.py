@@ -4,8 +4,16 @@ import zlib
 
 import pytest
 
-from app.contract import Bounds
-from app.plugins.ndvi_s2_median.render import MAX_DIMENSION, MIN_DIMENSION, bounds_of, dimension_for, grid_for, mercator, png_size
+from app.plugins.ndvi_s2_median.render import (
+    MAX_DIMENSION,
+    MIN_DIMENSION,
+    Bounds,
+    bounds_of,
+    dimension_for,
+    grid_for,
+    mercator,
+    png_size,
+)
 
 
 def test_bounds_of_polygon_and_multipolygon():
