@@ -22,6 +22,8 @@ type NewSnapshot struct {
 	DateEnd            time.Time
 	// Every parameter of the methodology, defaults filled in; sealed into the record.
 	Parameters Parameters
+	// Checked in the insert's transaction; the zero value checks nothing.
+	Limits Limits
 }
 
 // SnapshotDetail is one snapshot as the API returns it: status, inputs, results
@@ -99,9 +101,40 @@ func NewSnapshotRepository(db *gorm.DB) SnapshotRepository {
 // geometry_hash is taken from a normalised copy (coordinates snapped to ~1 cm,
 // points in a standard order), so the same boundary always hashes the same,
 // however it was drawn.
+//
+// An identical request still pending or processing (a double click, a retried submit)
+// returns that snapshot's id instead of queuing another.
 func (r *snapshotRepository) CreateWithJob(in NewSnapshot) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := lockOwner(tx, in.OwnerID); err != nil {
+			return err
+		}
+		if err := checkParcel(tx, in.ParcelID, in.OwnerID, in.Limits); err != nil {
+			return err
+		}
+
+		var existing []uuid.UUID
+		if err := tx.Raw(`
+			SELECT id FROM snapshots
+			WHERE parcel_id = ? AND methodology_id = ? AND series_id IS NULL
+			  AND date_start = ?::date AND date_end = ?::date
+			  AND parameters = resolve_methodology_parameters(methodology_id, ?::jsonb)
+			  AND status IN ('pending', 'processing')
+			LIMIT 1`,
+			in.ParcelID, in.MethodologyID,
+			in.DateStart.Format(time.DateOnly), in.DateEnd.Format(time.DateOnly), in.Parameters,
+		).Scan(&existing).Error; err != nil {
+			return err
+		}
+		if len(existing) > 0 {
+			id = existing[0]
+			return nil
+		}
+
+		if err := checkQuota(tx, in.OwnerID, in.Limits, 1); err != nil {
+			return err
+		}
 		var err error
 		id, err = insertSnapshotWithJob(tx, in, nil)
 		return err

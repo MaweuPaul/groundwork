@@ -144,6 +144,10 @@ Edit `.env`:
 | `REFRESH_TOKEN_TTL` | no | Defaults to `720h` (30 days). |
 | `PROXY_SECRET` | no | At least 32 characters, the same value as the frontend's `PROXY_SECRET`. With it, logins and sign-ups are rate-limited per visitor instead of per frontend server. |
 | `BEHIND_PROXY` | no | `true` when a proxy appends the caller to `X-Forwarded-For` (Render). |
+| `SNAPSHOTS_PER_DAY` | no | Snapshots one user may queue in any 24 hours, each series window counted. Defaults to `30`; `0` turns it off. |
+| `MAX_SNAPSHOT_AREA_HA` | no | The largest parcel a snapshot may cover. Defaults to `50000` (500 km²); `0` turns it off. |
+
+Every snapshot spends the Earth Engine project's compute quota, hence the two limits above. A request identical to one still pending or processing (same parcel, methodology, window and parameters) returns that snapshot instead of queuing another, so a double click costs nothing.
 
 Logins are limited to 10 at once then 1 a minute per visitor, and 5 at once then 1 every 3 minutes per account; sign-ups to 3 at once then 1 every 20 minutes per visitor. Limits are kept in memory, so they reset when the API restarts.
 

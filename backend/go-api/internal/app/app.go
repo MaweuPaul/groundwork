@@ -51,7 +51,10 @@ func New(cfg *config.Config, db *gorm.DB) *App {
 	// Snapshots
 	snapshotRepo := repository.NewSnapshotRepository(db)
 	methodologyRepo := repository.NewMethodologyRepository(db)
-	snapshotSvc := service.NewSnapshotService(snapshotRepo, methodologyRepo)
+	snapshotSvc := service.NewSnapshotService(snapshotRepo, methodologyRepo, repository.Limits{
+		PerDay:    cfg.SnapshotsPerDay,
+		MaxAreaHa: cfg.MaxSnapshotAreaHa,
+	})
 
 	activitySvc := service.NewActivityService(repository.NewActivityRepository(db))
 

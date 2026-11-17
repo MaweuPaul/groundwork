@@ -44,11 +44,44 @@ type SeriesSummary struct {
 }
 
 // CreateSeriesWithJobs inserts the series, its window snapshots and their jobs in one
-// transaction, so a series never exists half-queued.
+// transaction, so a series never exists half-queued. An identical series with windows still
+// pending or processing is returned instead of queuing another.
 func (r *snapshotRepository) CreateSeriesWithJobs(in NewSeries) (SeriesRef, error) {
 	var ref SeriesRef
 	t := in.Template
 	err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := lockOwner(tx, t.OwnerID); err != nil {
+			return err
+		}
+		if err := checkParcel(tx, t.ParcelID, t.OwnerID, t.Limits); err != nil {
+			return err
+		}
+
+		var existing []SeriesRef
+		if err := tx.Raw(`
+			SELECT r.id, r.short_id, (SELECT count(*) FROM snapshots s WHERE s.series_id = r.id) AS windows
+			FROM snapshot_series r
+			WHERE r.parcel_id = ? AND r.methodology_id = ?
+			  AND r.date_start = ?::date AND r.date_end = ?::date
+			  AND r.window_months = ? AND r.interval_months = ?
+			  AND r.parameters = resolve_methodology_parameters(r.methodology_id, ?::jsonb)
+			  AND EXISTS (SELECT 1 FROM snapshots s WHERE s.series_id = r.id AND s.status IN ('pending', 'processing'))
+			LIMIT 1`,
+			t.ParcelID, t.MethodologyID,
+			in.DateStart.Format(time.DateOnly), in.DateEnd.Format(time.DateOnly),
+			in.WindowMonths, in.IntervalMonths, t.Parameters,
+		).Scan(&existing).Error; err != nil {
+			return err
+		}
+		if len(existing) > 0 {
+			ref = existing[0]
+			return nil
+		}
+
+		if err := checkQuota(tx, t.OwnerID, t.Limits, len(in.Windows)); err != nil {
+			return err
+		}
+
 		res := tx.Raw(`
 			INSERT INTO snapshot_series (parcel_id, methodology_id, methodology_version, date_start, date_end,
 			                             window_months, interval_months, parameters)

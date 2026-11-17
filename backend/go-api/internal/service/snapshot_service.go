@@ -53,11 +53,12 @@ type SnapshotService interface {
 type snapshotService struct {
 	snapshots     repository.SnapshotRepository
 	methodologies repository.MethodologyRepository
+	limits        repository.Limits
 	now           func() time.Time
 }
 
-func NewSnapshotService(snapshots repository.SnapshotRepository, methodologies repository.MethodologyRepository) SnapshotService {
-	return &snapshotService{snapshots: snapshots, methodologies: methodologies, now: time.Now}
+func NewSnapshotService(snapshots repository.SnapshotRepository, methodologies repository.MethodologyRepository, limits repository.Limits) SnapshotService {
+	return &snapshotService{snapshots: snapshots, methodologies: methodologies, limits: limits, now: time.Now}
 }
 
 // GetNdviImage returns the snapshot's NDVI map PNG, or nil when there is none or it isn't the owner's.
@@ -114,6 +115,7 @@ func (s *snapshotService) CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, err
 		DateStart:          start,
 		DateEnd:            end,
 		Parameters:         params,
+		Limits:             s.limits,
 	})
 }
 
