@@ -65,6 +65,7 @@ This repository is a monorepo containing the frontend and two separate backend s
     │   │   ├── middleware/      # Authentication, roles, request logging, panic recovery
     │   │   ├── migrate/         # Applies migrations; used by cmd/migrate and the integration tests
     │   │   ├── models/          # GORM entities mapped to PostGIS tables
+    │   │   ├── ratelimit/       # In-memory token buckets for login and sign-up limits
     │   │   ├── repository/      # DB operations
     │   │   ├── routes/          # One file per feature; auth applied once to the protected group
     │   │   └── service/         # Business logic (auth, tokens, parcels)
@@ -77,6 +78,7 @@ This repository is a monorepo containing the frontend and two separate backend s
 
 - `POST /auth/register`: creates a user (`email`, `password`, `first_name`, `last_name`, `username`, `role`) and returns the user plus a token pair.
 - `POST /auth/login`: returns the user plus a token pair. Unknown email and wrong password give the same error.
+- Logins and sign-ups are rate-limited (429 with `Retry-After`); see `PROXY_SECRET` under Backend API.
 - `POST /auth/refresh`: swaps a refresh token for a new pair. Each refresh token works once; a token rotated in the last 10 seconds may be reused, so parallel requests and tabs don't sign the user out.
 - `POST /auth/logout`: `refresh_token`; ends that session at once (no reuse window). Always 204.
 - `GET /me`: the signed-in user.
@@ -101,13 +103,15 @@ Geometry is always returned as a GeoJSON `MultiPolygon`.
 
 - `POST /parcels/{id}/snapshots` (`asset_holder`, own parcels only): `methodology` (slug), `methodology_version` (required; never defaults to the latest), `date_start`, `date_end` (`YYYY-MM-DD`), and optional `parameters`, e.g. `{"min_clear_pct": 40}`. Each methodology lists its parameters with their ranges and defaults on `GET /methodologies`; any left out get their default, and the full set is sealed into the record. For NDVI these are `max_scene_cloud_pct` (0.01–100, default 20), `cloud_score_threshold` (0.40–0.80, default 0.60) and `min_clear_pct` (0–100, default 50). The older top-level `max_scene_cloud_pct` and `cloud_score_threshold` fields still work when `parameters` doesn't set them. Returns **202** with `{"id", "status": "pending"}` and a `Location: /snapshots/{id}` header; the Python worker computes it in the background.
   - In one transaction, the snapshot copies the parcel's current geometry, stores a `geometry_hash` of a normalised copy (coordinates snapped to ~1 cm, points in a standard order, so the same boundary always hashes the same), and queues its job.
+  - A request identical to one still pending or processing (same parcel, methodology, window and parameters) returns that snapshot instead of queuing another.
+  - 429 when the user's daily snapshot allowance is used up, 422 when the parcel is larger than the area limit (see `SNAPSHOTS_PER_DAY` and `MAX_SNAPSHOT_AREA_HA`).
   - 400 if a date is malformed, `date_end` is before `date_start` or in the future, `date_start` is before 2015-06-23 (first Sentinel-2 imagery), the range is longer than a year, the methodology version doesn't exist, or a parameter is unknown or out of range. 404 if the parcel doesn't exist or isn't yours.
 - `GET /parcels/{id}/snapshots`: the parcel's snapshot history, newest first, with each snapshot's `parameters`, `flags`, measurements and `record_hash`. 404 if the parcel doesn't exist or isn't yours.
-- `POST /parcels/{id}/series` (`asset_holder`): a time series. The same fields, where the dates are the whole range, plus `window_months` and `interval_months` (1–12). Creates one snapshot per window in one transaction (at most 24; a last window that overruns is cut short at `date_end`). Returns **202** with `{"id", "short_id", "windows"}`.
+- `POST /parcels/{id}/series` (`asset_holder`): a time series. The same fields, where the dates are the whole range, plus `window_months` and `interval_months` (1–12). Creates one snapshot per window in one transaction (at most 24; a last window that overruns is cut short at `date_end`). Every window counts against the daily allowance, and an identical series still running is returned instead of queued again. Returns **202** with `{"id", "short_id", "windows"}`.
 - `GET /parcels/{id}/series`: the parcel's series with progress and, once every window has finished, `record_hash` and `sealed_at`.
 - `GET /snapshots/{id}/ndvi.png`: the NDVI map image of a completed snapshot. `ndvi_image` on snapshot responses gives its bounds and colour scale. 404 if there is none yet or it isn't yours.
 - `GET /methodologies`: the methodologies a snapshot can be requested with, each with its `parameters` (name, label, type, min, max, default).
-- `GET /snapshots/{id}`: one snapshot of your own. Poll it after creating a snapshot until `status` is `completed` or `failed`. Returns the status (and `failure_message`), inputs (methodology, dates, `parameters`, `geometry_hash`), quality `flags` (e.g. `low_coverage`, which doesn't fail the snapshot), timings, `measurements` as a `{type: value}` map, `imagery_sources` (scene, satellite, acquisition time, cloud %), and once completed, `chain_seq`, `record_hash` and `prev_record_hash`. `job` shows queue progress: attempts, `next_attempt_at` while waiting to retry, and the last error code (the worker's raw message stays internal). The frozen geometry is not included. 404 if it doesn't exist or isn't yours.
+- `GET /snapshots/{id}`: one snapshot of your own. Poll it after creating a snapshot until `status` is `completed` or `failed`. Returns the status (and `failure_message`), inputs (methodology, dates, `parameters`, `geometry_hash`), quality `flags` (e.g. `low_coverage`, which doesn't fail the snapshot), timings, `measurements` as a `{type: value}` map, `imagery_sources` (scene, satellite, acquisition time, cloud %), and once completed, `parcel_seq` (its position in the parcel's chain), `record_hash`, `prev_record_hash`, and from record format v4 `code_version` and `manifest_sha256`. `job` shows queue progress: attempts, `next_attempt_at` while waiting to retry, and the last error code (the worker's raw message stays internal). The frozen geometry is not included. 404 if it doesn't exist or isn't yours.
 
 ## Prerequisites
 
@@ -295,22 +299,16 @@ When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its
 - The NDVI map image is a picture of the evidence and is not part of the hash.
 - A parcel chain can't show that a parcel's newest records, or the whole parcel, were deleted by someone with database access. Planned: a periodic checkpoint hashing every parcel's head, published externally (e.g. OpenTimestamps), which also proves the history existed at that time. No blockchain or Web3 is required.
 
-### Schema status
+### Planned schema
+
+The schema as built is in [backend/go-api/migrations](backend/go-api/migrations), one numbered file per change.
 
 | Change | Purpose |
 |---|---|
-| ✅ `snapshots.chain_seq`, `record_hash`, `prev_record_hash` | Hash chain, write-once (migration 005) |
-| ✅ `snapshots.parcel_seq`, `parcel_chain_heads` | One chain per parcel (migration 015) |
-| ✅ `snapshot_jobs`, `gee_worker` role | Queue and least-privilege worker login (migration 006) |
-| ✅ `parcels.short_id`, `snapshots.short_id` | Clean URLs (migration 008) |
-| ✅ `snapshots.max_scene_cloud_pct`, `cloud_score_threshold`, `record_format` | Per-snapshot cloud settings, sealed from format v2 (migration 009) |
-| ✅ `snapshot_ndvi_images` | NDVI map images, outside the hash (migration 010) |
-| ✅ `snapshot_series`, `snapshots.series_id` | Time series and their seal (migration 011) |
-| ✅ `methodology_parameters` | Each methodology's parameters, ranges and defaults; insert-only (migration 012) |
-| ✅ `snapshots.parameters`, `imagery_sources.source_version`, `snapshot_flags`; record format v3 | Generic parameters replace the cloud columns in the record; source versions and quality flags are sealed (migration 013) |
 | `parcel_access` | Sharing parcels with auditors |
-| `snapshots.requested_by`, `input_hash` | Who ran it; same request returns the existing completed snapshot |
+| `snapshots.requested_by` | Who ran each snapshot |
 | `audit_events` | Append-only log of who did what and when |
+| Chain checkpoints | A periodic hash over every parcel's chain head, published outside the database |
 
 ### Go ↔ Python contract: the database
 
@@ -331,7 +329,7 @@ The worker has no direct `UPDATE` rights. It drives jobs through four functions,
 |---|---|
 | `claim_snapshot_job(worker, lock_for)` | Claims the next due job (or one abandoned by a dead worker) and returns its inputs: job and snapshot IDs, attempt, methodology, dates, parameters, GeoJSON geometry. No row means nothing to do. |
 | `extend_snapshot_job_lock(job, worker, lock_for)` | Heartbeat during long computations. |
-| `complete_snapshot_job(job, worker)` | Called last, in the transaction that inserted the results. Completes the snapshot (the hash trigger stamps it) and returns `record_hash`. |
+| `complete_snapshot_job(job, worker, code_version)` | Called last, in the transaction that inserted the results. Records the worker's code version, completes the snapshot (the hash trigger stamps it) and returns `record_hash`. |
 | `fail_snapshot_job(job, worker, code, message, retryable)` | Retryable: re-queued with backoff (1, 2, 4… minutes, at most 1 hour) until `max_attempts`. Otherwise the job and snapshot fail with the code and message. |
 
 `worker` must be unique per running process. A worker whose lock expired and was taken over by another is refused, so two workers can never both save a result. The `gee_worker` role is created without a password; set one by hand with `ALTER ROLE gee_worker PASSWORD '...'`.
@@ -370,7 +368,7 @@ Each methodology's code is a plugin in `app/plugins/<name>/`, found automaticall
 
 ## Proposed: analysis plugins
 
-**Status: partly built** (see [Build order](#build-order)). Goal: add analyses (rainfall, phenology, water history, terrain, EUDR) without touching the core each time. Diagrams and the data model are in [docs/design/multi-analysis.md](docs/design/multi-analysis.md); today's system is in [docs/architecture.md](docs/architecture.md).
+**Status: partly built** (see [Build order](#build-order)). Goal: add analyses (rainfall, phenology, water history, terrain, EUDR) without touching the core each time. The proposed design (components, evidence layers, data model, the plugin contract and the planned tables) is in [docs/design/multi-analysis.md](docs/design/multi-analysis.md); today's system is in [docs/architecture.md](docs/architecture.md).
 
 Built so far: plugin folders with auto-discovery, manifests checked against the database at startup, generic parameters through the API and worker, source versions and quality flags in record format v3, and the worker's code version and the manifest hash in record format v4. The image table and the frontend still assume NDVI.
 
@@ -396,8 +394,8 @@ Versions and hashes do different jobs, so both stay. A version **names** what ra
 
 | Thing | Version | Hash | Why |
 |---|---|---|---|
-| Methodology / plugin | ✅ `1.0.0` | ✅ manifest hash, sealed into each record | A version is only a label; the hash catches a recipe changed without a new version |
-| Plugin code | ✅ with the plugin | Git commit recorded with each record | Shows exactly which code ran |
+| Methodology / plugin | ✅ `1.0.0` | ✅ manifest hash, sealed into each record (format v4) | A version is only a label; the hash catches a recipe changed without a new version |
+| Plugin code | ✅ with the plugin | ✅ worker's git commit, sealed into each record (format v4) | Shows exactly which code ran |
 | Datasets | ✅ collection ID and version | ❌ | Too large to hash; they can be reprocessed, so the version must be stored |
 | Parameters | ❌ | ✅ inside the record hash | Chosen per snapshot |
 | Snapshot, series, analysis, report | ❌ | ✅ | These are the evidence |
@@ -405,42 +403,6 @@ Versions and hashes do different jobs, so both stay. A version **names** what ra
 | Map images and other artifacts | ❌ | ✅ SHA-256, once they become `artifacts` | Today's NDVI image isn't hashed |
 
 The worker refuses to start if a manifest differs from what is published under the same version: changing a calculation means a new version, and old records stay reproducible.
-
-### Proposed system design
-
-**Components and how they talk.** Each analysis is a plugin; analysis plugins only read records that are already sealed.
-
-![Proposed components with plugins, batch exports and reports](docs/diagrams/multi-analysis-1.svg)
-
-**Layers of sealed evidence.** Each layer's hash covers the hashes below it.
-
-![Scenes, snapshot, series, analysis and report layers](docs/diagrams/multi-analysis-2.svg)
-
-**Data model.** New and changed tables.
-
-![Proposed data model](docs/diagrams/multi-analysis-3.svg)
-
-**How a combined analysis runs.** Rainfall-adjusted productivity as the example.
-
-![Sequence of a combined analysis](docs/diagrams/multi-analysis-4.svg)
-
-**The plugin contract.** What every plugin declares and returns.
-
-![Plugin and Result contract](docs/diagrams/multi-analysis-5.svg)
-
-### Proposed changes
-
-| Change | Replaces or adds |
-|---|---|
-| `methodologies`: `kind`, `parameter_spec`, `data_start`, `needs_window`, `datasets`, `manifest_hash` | Adds the plugin's declaration |
-| `methodology_outputs` | Declared outputs: key, kind, unit, native resolution |
-| `snapshots`: `parameters`, `dataset_versions`, `code_version`, `quality`; record format v3 | Cloud columns become NDVI's parameters. `quality` can be `insufficient_resolution` |
-| `series_points` | Dated values; a missing observation is null, never 0 |
-| `artifacts` | Replaces `snapshot_ndvi_images`; adds media type and SHA-256 |
-| `analyses`, `analysis_inputs` | Sealed results built over other sealed records, e.g. RESTREND |
-| `reports`, `report_items` | Bundles for buyers, lenders and exporters, worded as evidence, not certification |
-| `reference_areas` | Frozen, hashed areas for peer benchmarks |
-| Earth Engine batch exports | Jobs over the 5-minute limit for one request |
 
 ### Adding a methodology
 

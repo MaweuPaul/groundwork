@@ -54,7 +54,7 @@ type SnapshotDetail struct {
 	CreatedAt      time.Time          `json:"created_at"`
 	StartedAt      *time.Time         `json:"started_at,omitempty"`
 	CompletedAt    *time.Time         `json:"completed_at,omitempty"`
-	ChainSeq       *int64             `json:"chain_seq,omitempty"` // position in the closed global chain, for records sealed before per-parcel chains
+	ChainSeq       *int64             `json:"chain_seq,omitempty"`  // position in the closed global chain, for records sealed before per-parcel chains
 	ParcelSeq      *int64             `json:"parcel_seq,omitempty"` // position in the parcel's own chain
 	RecordHash     *string            `json:"record_hash,omitempty"`
 	PrevRecordHash *string            `json:"prev_record_hash,omitempty"`

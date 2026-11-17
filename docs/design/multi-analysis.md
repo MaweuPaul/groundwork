@@ -30,6 +30,20 @@ way down to individual satellite scenes.
 
 <sub>Source: [multi-analysis-3.mmd](../diagrams/multi-analysis-3.mmd)</sub>
 
+### Planned tables and columns
+
+| Change | Replaces or adds |
+|---|---|
+| `methodologies`: `kind`, `data_start`, `needs_window`, `datasets` | Adds the plugin's declaration. Built: parameters live in `methodology_parameters` (migration 012), and the manifest hash is computed from them, not stored (migration 014) |
+| `methodology_outputs` | Declared outputs: key, kind, unit, native resolution |
+| `snapshots`: `quality` | Can be `insufficient_resolution`. Built: `parameters` and source versions (format v3), `code_version` (format v4); quality flags live in `snapshot_flags` |
+| `series_points` | Dated values; a missing observation is null, never 0 |
+| `artifacts` | Replaces `snapshot_ndvi_images`; adds media type and SHA-256 |
+| `analyses`, `analysis_inputs` | Sealed results built over other sealed records, e.g. RESTREND |
+| `reports`, `report_items` | Bundles for buyers, lenders and exporters, worded as evidence, not certification |
+| `reference_areas` | Frozen, hashed areas for peer benchmarks |
+| Earth Engine batch exports | Jobs over the 5-minute limit for one request |
+
 Migration path: the current `max_scene_cloud_pct` / `cloud_score_threshold` columns become
 NDVI's `parameters`; `snapshot_ndvi_images` becomes `artifacts`; existing records keep their
 v1/v2 hash formats and still verify.
