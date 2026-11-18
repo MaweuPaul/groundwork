@@ -20,9 +20,6 @@ import {
 } from '@/components/ui/dialog';
 import type { Methodology, MethodologyParameter } from '@/lib/types';
 
-// Sentinel-2B's first imagery; the API rejects earlier start dates.
-const EARLIEST = '2015-06-23';
-
 // Cloud Score+ cs_cdf a pixel needs to count as clear.
 const MASKS = [
   { value: 0.65, label: 'Strict', help: 'Fewer pixels, least haze' },
@@ -255,6 +252,8 @@ const RunSnapshotDialog = ({
   );
 
   const selected = methodologies.find((m) => `${m.slug}@${m.version}` === methodologyKey);
+  // The API rejects start dates before the methodology's data begins.
+  const earliest = selected?.data_start.slice(0, 10);
   const parameters = [...(selected?.parameters ?? [])].sort((a, b) => rank(a.name) - rank(b.name));
   const today = isoDay(new Date());
   const windows = mode === 'series' ? seriesWindows(dateStart, dateEnd, windowMonths, intervalMonths) : [];
@@ -348,7 +347,7 @@ const RunSnapshotDialog = ({
                     name="date_start"
                     value={dateStart}
                     onChange={setDateStart}
-                    min={EARLIEST}
+                    min={earliest}
                     max={dateEnd}
                   />
                 </div>
@@ -439,8 +438,7 @@ const RunSnapshotDialog = ({
               </div>
               {selected && (
                 <p className="text-caption text-muted-foreground">
-                  {selected.satellite}, bands {selected.bands.join('/')}, {selected.composite_method} composite,
-                  clouds masked per pixel with {selected.cloud_mask.replaceAll('_', ' ')}.
+                  {selected.description} Data from {selected.data_start.slice(0, 10)}.
                 </p>
               )}
             </div>

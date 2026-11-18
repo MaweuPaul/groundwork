@@ -38,6 +38,7 @@ type SnapshotRef struct {
 // SnapshotResult is a parcel's most recent completed snapshot.
 type SnapshotResult struct {
 	SnapshotID   uuid.UUID          `json:"snapshot_id"`
+	Methodology  string             `json:"methodology"` // slug
 	CompletedAt  time.Time          `json:"completed_at"`
 	Measurements map[string]float64 `json:"measurements"`
 }

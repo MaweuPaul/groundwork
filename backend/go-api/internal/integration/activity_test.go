@@ -33,8 +33,8 @@ func TestActivityShowsOnlyTheOwnersEvents(t *testing.T) {
 			t.Errorf("event %s is for parcel %s, not the owner's", e.Kind, e.ParcelID)
 		}
 		if e.Kind == repository.ActivitySnapshotCompleted {
-			if e.NdviMean == nil || *e.NdviMean != clearResult.Measurements["ndvi_mean"] {
-				t.Errorf("completed event NDVI = %v", e.NdviMean)
+			if e.Methodology == nil || *e.Methodology != "ndvi-s2-median" || e.Measurements["ndvi_mean"] != clearResult.Measurements["ndvi_mean"] {
+				t.Errorf("completed event = %v %v", e.Methodology, e.Measurements)
 			}
 			if e.RecordHash == nil || len(e.Flags) != 1 || e.Flags[0] != "low_coverage" {
 				t.Errorf("completed event hash %v, flags %v", e.RecordHash, e.Flags)

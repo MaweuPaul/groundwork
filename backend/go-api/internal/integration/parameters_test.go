@@ -126,3 +126,26 @@ func TestMethodologiesListTheirParameterSpecs(t *testing.T) {
 	}
 	t.Fatal("ndvi-s2-median is not listed")
 }
+
+func TestMethodologiesStateWhereTheirDataStarts(t *testing.T) {
+	tx := begin(t)
+	methodologies, err := repository.NewMethodologyRepository(tx).List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"ndvi-s2-median": "2015-06-23", "chirps-rain-season": "1981-01-01"}
+	for _, m := range methodologies {
+		if day, ok := want[m.Slug]; ok {
+			if got := m.DataStart.Format("2006-01-02"); got != day {
+				t.Errorf("%s data_start = %s, want %s", m.Slug, got, day)
+			}
+			if m.Slug == "chirps-rain-season" && m.CloudMask != nil {
+				t.Errorf("chirps cloud_mask = %q, want none", *m.CloudMask)
+			}
+			delete(want, m.Slug)
+		}
+	}
+	if len(want) > 0 {
+		t.Errorf("not listed: %v", want)
+	}
+}

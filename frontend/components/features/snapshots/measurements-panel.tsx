@@ -1,12 +1,16 @@
-import { Sprout, TriangleAlert } from 'lucide-react';
+import { Gauge, TriangleAlert } from 'lucide-react';
 
 import Border from '@/components/shared/border';
+import { formatMeasurement, methodologyView, orderedSlugs } from '@/lib/methodologies';
 import type { Snapshot } from '@/lib/types';
 
 const tileLabel = 'font-mono text-micro tracking-[0.12em] text-muted-foreground uppercase';
 
 const MeasurementsPanel = ({ snapshot }: { snapshot: Snapshot }) => {
   const m = snapshot.measurements;
+  const view = methodologyView(snapshot.methodology);
+  const Icon = view?.icon ?? Gauge;
+  const slugs = orderedSlugs(snapshot.methodology, m);
   const valid = m.valid_pixel_pct;
   const vis = snapshot.ndvi_image?.visualization;
   const minClear = snapshot.parameters?.min_clear_pct;
@@ -16,38 +20,33 @@ const MeasurementsPanel = ({ snapshot }: { snapshot: Snapshot }) => {
     <Border className="flex flex-col gap-4 p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="flex items-center gap-2 text-h2 font-semibold">
-          <Sprout className="size-5" />
-          Vegetation measurements
+          <Icon className="size-5" />
+          {view?.title ?? 'Measurements'}
         </h2>
-        <span className="font-mono text-micro text-muted-foreground">10 m pixels · median composite</span>
+        {view && <span className="font-mono text-micro text-muted-foreground">{view.scale}</span>}
       </div>
 
-      {m.ndvi_mean === undefined ? (
+      {slugs.length === 0 ? (
         <p className="rounded-sm bg-surface-low px-4 py-6 text-center text-label text-muted-foreground">
           {snapshot.status === 'failed' ? 'No measurements: the snapshot failed.' : 'Measurements appear when the snapshot completes.'}
         </p>
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-sm bg-surface-low p-4">
-              <span className={tileLabel}>Mean NDVI</span>
-              <span className="mt-1 block font-mono text-[32px] leading-none font-semibold">{m.ndvi_mean.toFixed(3)}</span>
-              <span className="mt-1 block text-caption text-muted-foreground">Average over clear pixels</span>
-            </div>
-            <div className="rounded-sm bg-surface-low p-4">
-              <span className={tileLabel}>Max NDVI</span>
-              <span className="mt-1 block font-mono text-[32px] leading-none font-semibold">
-                {m.ndvi_max?.toFixed(3) ?? '—'}
-              </span>
-              <span className="mt-1 block text-caption text-muted-foreground">Densest pixel in the parcel</span>
-            </div>
-            <div className="rounded-sm bg-surface-low p-4">
-              <span className={tileLabel}>Clear pixels</span>
-              <span className="mt-1 block font-mono text-[32px] leading-none font-semibold">
-                {valid === undefined ? '—' : `${valid.toFixed(1)}%`}
-              </span>
-              <span className="mt-1 block text-caption text-muted-foreground">Of the parcel, after cloud masking</span>
-            </div>
+            {slugs.map((slug) => {
+              const type = snapshot.measurement_types?.[slug];
+              return (
+                <div key={slug} className="rounded-sm bg-surface-low p-4">
+                  <span className={tileLabel}>{type?.name ?? slug.replaceAll('_', ' ')}</span>
+                  <span className="mt-1 block font-mono text-[32px] leading-none font-semibold">
+                    {formatMeasurement(m[slug], type?.unit)}
+                  </span>
+                  {type?.description && (
+                    <span className="mt-1 block text-caption text-muted-foreground">{type.description}</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {valid !== undefined && (

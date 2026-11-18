@@ -3,6 +3,7 @@ import { Layers3, ShieldCheck } from 'lucide-react';
 import Border from '@/components/shared/border';
 import CopyButton from '@/components/shared/copy-button';
 import LocalTime from '@/components/shared/local-time';
+import { settingsSummary } from '@/lib/methodologies';
 import type { SeriesSummary } from '@/lib/types';
 
 const months = (n: number) => `${n} ${n === 1 ? 'month' : 'months'}`;
@@ -30,8 +31,7 @@ const SeriesPanel = ({ series }: { series: SeriesSummary[] }) => {
                 </span>
               </div>
               <span className="font-mono text-micro text-muted-foreground">
-                {months(s.window_months)} windows every {months(s.interval_months)} · scenes ≤{s.max_scene_cloud_pct}% ·
-                clear ≥{s.cloud_score_threshold.toFixed(2)}
+                {months(s.window_months)} windows every {months(s.interval_months)} · {settingsSummary(s.parameters)}
               </span>
               <div className="flex items-center gap-3">
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-high">

@@ -23,9 +23,6 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string { return e.Message }
 
-// sentinel2Start is the first day of Sentinel-2 imagery.
-var sentinel2Start = time.Date(2015, 6, 23, 0, 0, 0, 0, time.UTC)
-
 // maxSnapshotRange keeps one Earth Engine job to at most a year of imagery.
 const maxSnapshotRange = 366 * 24 * time.Hour
 
@@ -94,15 +91,7 @@ func (s *snapshotService) CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, err
 		return uuid.Nil, err
 	}
 
-	m, err := s.methodologies.GetBySlugVersion(slug, version)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	if m == nil {
-		return uuid.Nil, ErrUnknownMethodology
-	}
-
-	params, err := s.resolveParameters(m.ID, in.Parameters)
+	m, params, err := s.methodologyFor(slug, version, start, in.Parameters)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -117,6 +106,28 @@ func (s *snapshotService) CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, err
 		Parameters:         params,
 		Limits:             s.limits,
 	})
+}
+
+// methodologyFor loads the methodology and checks the request against it: its data must
+// cover the start date, and the parameters are resolved with their defaults.
+func (s *snapshotService) methodologyFor(slug, version string, start time.Time, given map[string]float64) (*models.Methodology, repository.Parameters, error) {
+	m, err := s.methodologies.GetBySlugVersion(slug, version)
+	if err != nil {
+		return nil, nil, err
+	}
+	if m == nil {
+		return nil, nil, ErrUnknownMethodology
+	}
+	if start.Before(m.DataStart) {
+		return nil, nil, &ValidationError{
+			fmt.Sprintf("date_start cannot be before %s, the first day of data for %s", m.DataStart.Format(time.DateOnly), m.Name),
+		}
+	}
+	params, err := s.resolveParameters(m.ID, given)
+	if err != nil {
+		return nil, nil, err
+	}
+	return m, params, nil
 }
 
 // resolveParameters checks the request's parameters against the methodology's and fills in
@@ -175,10 +186,6 @@ func (s *snapshotService) parseDates(rawStart, rawEnd string, limitRange bool) (
 		return time.Time{}, time.Time{}, &ValidationError{"date_end must be on or after date_start"}
 	case end.After(today):
 		return time.Time{}, time.Time{}, &ValidationError{"date_end cannot be in the future"}
-	case start.Before(sentinel2Start):
-		return time.Time{}, time.Time{}, &ValidationError{
-			fmt.Sprintf("date_start cannot be before %s, when Sentinel-2 imagery begins", sentinel2Start.Format(time.DateOnly)),
-		}
 	case limitRange && end.Sub(start) > maxSnapshotRange:
 		return time.Time{}, time.Time{}, &ValidationError{"the date range cannot be longer than one year"}
 	}

@@ -57,14 +57,7 @@ func (s *snapshotService) CreateSeries(in CreateSeriesInput) (repository.SeriesR
 		}
 	}
 
-	m, err := s.methodologies.GetBySlugVersion(slug, version)
-	if err != nil {
-		return repository.SeriesRef{}, err
-	}
-	if m == nil {
-		return repository.SeriesRef{}, ErrUnknownMethodology
-	}
-	params, err := s.resolveParameters(m.ID, in.Parameters)
+	m, params, err := s.methodologyFor(slug, version, start, in.Parameters)
 	if err != nil {
 		return repository.SeriesRef{}, err
 	}

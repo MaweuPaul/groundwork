@@ -3,11 +3,12 @@ import Link from 'next/link';
 
 import LocalTime from '@/components/shared/local-time';
 import StatusBadge from '@/components/shared/status-badge';
-import { formatArea, formatCoordinates, formatNdvi } from '@/lib/format';
+import { formatArea, formatCoordinates } from '@/lib/format';
+import { resultSummary } from '@/lib/methodologies';
 import { parcelPath } from '@/lib/paths';
 import type { Parcel } from '@/lib/types';
 
-const columns = ['Parcel', 'Centroid', 'Area (ha)', 'Latest NDVI', 'Last result', 'Status'];
+const columns = ['Parcel', 'Centroid', 'Area (ha)', 'Latest result', 'Last result', 'Status'];
 
 // compact: for a narrower column next to other content; the centroid shows only on 2xl screens.
 const ParcelsTable = ({ parcels, compact = false }: { parcels: Parcel[]; compact?: boolean }) => {
@@ -51,7 +52,7 @@ const ParcelsTable = ({ parcels, compact = false }: { parcels: Parcel[]; compact
               </td>
               <td className="px-5 py-4 font-mono text-label whitespace-nowrap">{formatArea(parcel.area_ha)}</td>
               <td className="px-5 py-4 font-mono text-label font-semibold text-olive">
-                {formatNdvi(parcel.latest_result?.measurements.ndvi_mean)}
+                {resultSummary(parcel.latest_result?.methodology, parcel.latest_result?.measurements) ?? '—'}
               </td>
               <td className="px-5 py-4 font-mono text-caption whitespace-nowrap text-muted-foreground">
                 {parcel.latest_result ? <LocalTime iso={parcel.latest_result.completed_at} style="date" /> : '—'}

@@ -9,11 +9,11 @@ import CopyButton from '@/components/shared/copy-button';
 import FlagBadge from '@/components/shared/flag-badge';
 import LocalTime from '@/components/shared/local-time';
 import StatusBadge from '@/components/shared/status-badge';
-import { formatNdvi } from '@/lib/format';
+import { resultSummary, settingsSummary } from '@/lib/methodologies';
 import { snapshotPath } from '@/lib/paths';
 import type { Methodology, SnapshotSummary } from '@/lib/types';
 
-const columns = ['Date range', 'Methodology', 'NDVI mean', 'Valid pixels', 'Status', 'Record hash', ''];
+const columns = ['Date range', 'Methodology', 'Result', 'Status', 'Record hash', ''];
 
 const shortHash = (hash: string) => `${hash.slice(0, 6)}…${hash.slice(-4)}`;
 
@@ -85,7 +85,7 @@ const SnapshotHistory = ({
                       {s.methodology} v{s.methodology_version}
                     </span>
                     <span className="mt-1.5 block font-mono text-micro whitespace-nowrap text-muted-foreground">
-                      scenes ≤{s.max_scene_cloud_pct}% · clear ≥{s.cloud_score_threshold.toFixed(2)}
+                      {settingsSummary(s.parameters)}
                     </span>
                     {s.series_short_id && (
                       <span className="mt-1 block font-mono text-micro text-olive uppercase">
@@ -93,13 +93,8 @@ const SnapshotHistory = ({
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-4 font-mono text-label font-semibold">
-                    {formatNdvi(s.measurements.ndvi_mean)}
-                  </td>
-                  <td className="px-5 py-4 font-mono text-caption text-muted-foreground">
-                    {s.measurements.valid_pixel_pct === undefined
-                      ? '—'
-                      : `${s.measurements.valid_pixel_pct.toFixed(0)}%`}
+                  <td className="px-5 py-4 font-mono text-label font-semibold whitespace-nowrap">
+                    {resultSummary(s.methodology, s.measurements) ?? '—'}
                   </td>
                   <td className="px-5 py-4">
                     <StatusBadge status={s.status} />
