@@ -92,7 +92,7 @@ export default async function SnapshotPage({ params }: { params: Promise<{ ref: 
             <Border className="flex flex-col gap-4 p-5">
               <h2 className="flex items-center gap-2 text-h2 font-semibold">
                 <MapIcon className="size-5" />
-                Boundary &amp; NDVI
+                {s.methodology === 'ndvi-s2-median' ? 'Boundary & NDVI' : 'Boundary'}
               </h2>
               <ParcelMap
                 geometry={parcel.data.geometry}
@@ -102,7 +102,7 @@ export default async function SnapshotPage({ params }: { params: Promise<{ ref: 
                     : []
                 }
               />
-              {s.status === 'completed' && !s.ndvi_image && (
+              {s.status === 'completed' && s.methodology === 'ndvi-s2-median' && !s.ndvi_image && (
                 <p className="font-mono text-micro text-muted-foreground">
                   {s.flags?.some((f) => f.flag === 'map_image_failed')
                     ? 'The NDVI image could not be drawn for this snapshot; its measurements are unaffected.'

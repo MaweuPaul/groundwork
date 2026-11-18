@@ -40,6 +40,6 @@ Built so far: plugin folders with auto-discovery, manifests checked against the 
 1. ✅ Plugin folders, auto-discovery and manifests; NDVI moved onto them with no change in behaviour.
 2. ✅ Generic parameters, source versions, quality flags; record format v3. Code version and manifest hash sealed in record format v4.
 3. ✅ `artifacts`, sealed in record format v5. Remaining: `series_points`, methodology-aware frontend views.
-4. Second plugin, `chirps-rain-season`, end to end.
+4. ✅ Second plugin, `chirps-rain-season`, end to end: seasonal rainfall from CHIRPS against the 1991–2020 normal. Each methodology now states where its data starts (`data_start`), and the frontend shows any methodology's measurements by their published names and units.
 5. Prototype water history and rainfall-adjusted residuals on parcels with known ground truth.
 6. Analyses and batch exports, then reports.

@@ -72,6 +72,6 @@ service reads it. Existing records keep the format they were sealed with and sti
 1. ✅ Plugin contract + parameter specs; NDVI moved onto it (refactor, no behaviour change).
 2. ✅ Generic `parameters`, dataset provenance, quality flags (record format v3); manifest hash and worker code version (format v4).
 3. ✅ `artifacts` (record format v5). Remaining: `series_points`, methodology-aware frontend views.
-4. Second plugin, `chirps-rain-season`, end to end.
+4. ✅ Second plugin, `chirps-rain-season`, end to end: seasonal rainfall from CHIRPS against the 1991–2020 normal. Each methodology now states where its data starts (`data_start`), and the frontend shows any methodology's measurements by their published names and units.
 5. Prototype `water-history` and rainfall-adjusted residuals on parcels with known ground truth.
 6. Analyses and batch exports; then reports with fixed, reviewed wording.

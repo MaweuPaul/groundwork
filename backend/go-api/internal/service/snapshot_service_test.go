@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,7 +76,11 @@ func (f *fakeMethodologyRepo) Parameters(methodologyID uuid.UUID) ([]models.Meth
 	return f.params, nil
 }
 
-var ndvi = &models.Methodology{ID: uuid.New(), Slug: "ndvi-s2-median", Version: "1.0.0", MaxCloudPct: 20}
+var ndvi = &models.Methodology{ID: uuid.New(), Name: "NDVI", Slug: "ndvi-s2-median", Version: "1.0.0", MaxCloudPct: 20,
+	DataStart: time.Date(2015, 6, 23, 0, 0, 0, 0, time.UTC)}
+
+var chirps = &models.Methodology{ID: uuid.New(), Name: "Seasonal rainfall, CHIRPS", Slug: "chirps-rain-season", Version: "1.0.0",
+	DataStart: time.Date(1981, 1, 1, 0, 0, 0, 0, time.UTC)}
 
 var ndviParams = []models.MethodologyParameter{
 	{Name: "cloud_score_threshold", Label: "Clear pixel threshold", Type: "number", Min: 0.40, Max: 0.80, Default: 0.60},
@@ -185,7 +190,7 @@ func TestCreateSnapshotRejectsBadInput(t *testing.T) {
 		{"bad end format", func(in *CreateSnapshotInput) { in.DateEnd = "2025-13-01" }},
 		{"end before start", func(in *CreateSnapshotInput) { in.DateStart, in.DateEnd = "2025-04-30", "2025-03-01" }},
 		{"end in the future", func(in *CreateSnapshotInput) { in.DateEnd = "2026-11-03" }},
-		{"before Sentinel-2", func(in *CreateSnapshotInput) { in.DateStart = "2015-06-22" }},
+		{"before the methodology's data starts", func(in *CreateSnapshotInput) { in.DateStart = "2015-06-22" }},
 		{"longer than a year", func(in *CreateSnapshotInput) { in.DateStart, in.DateEnd = "2023-01-01", "2024-01-03" }},
 		{"zero scene cloud", withParam("max_scene_cloud_pct", 0)},
 		{"scene cloud over 100", withParam("max_scene_cloud_pct", 100.5)},
@@ -263,5 +268,23 @@ func TestCreateSnapshotPassesRepositoryErrors(t *testing.T) {
 				t.Fatalf("err = %v, want %v", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestCreateSnapshotChecksTheMethodologysOwnDataStart(t *testing.T) {
+	in := validInput()
+	in.Methodology, in.Parameters = "chirps-rain-season", nil
+	in.DateStart, in.DateEnd = "2010-03-01", "2010-05-31"
+	chirpsRepo := &fakeMethodologyRepo{m: chirps, params: []models.MethodologyParameter{}}
+
+	if _, err := newTestSnapshotService(&fakeSnapshotRepo{}, chirpsRepo).CreateSnapshot(in); err != nil {
+		t.Fatalf("2010 is within CHIRPS data, got %v", err)
+	}
+
+	in.DateStart, in.DateEnd = "1980-12-31", "1981-03-31"
+	_, err := newTestSnapshotService(&fakeSnapshotRepo{}, chirpsRepo).CreateSnapshot(in)
+	var invalid *ValidationError
+	if !errors.As(err, &invalid) || !strings.Contains(invalid.Message, "1981-01-01") {
+		t.Fatalf("err = %v, want a ValidationError naming 1981-01-01", err)
 	}
 }

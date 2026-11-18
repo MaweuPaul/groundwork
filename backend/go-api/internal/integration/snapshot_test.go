@@ -91,6 +91,12 @@ func TestSnapshotLifecycleSealsRecordV4(t *testing.T) {
 	if detail.Measurements["valid_pixel_pct"] != 87.5 || len(detail.ImagerySources) != 1 {
 		t.Errorf("detail measurements %v, sources %d", detail.Measurements, len(detail.ImagerySources))
 	}
+	if mt := detail.MeasurementTypes["valid_pixel_pct"]; mt.Name != "Valid pixel percentage" || mt.Unit == nil || *mt.Unit != "%" {
+		t.Errorf("valid_pixel_pct type = %+v", mt)
+	}
+	if len(detail.MeasurementTypes) != len(detail.Measurements) {
+		t.Errorf("%d measurement types for %d measurements", len(detail.MeasurementTypes), len(detail.Measurements))
+	}
 
 	other := newUser(t, tx, "asset_holder")
 	if hidden, err := repository.NewSnapshotRepository(tx).GetByIDForOwner(id, other); err != nil || hidden != nil {

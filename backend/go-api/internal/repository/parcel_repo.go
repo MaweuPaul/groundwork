@@ -85,13 +85,15 @@ func (r *parcelRepository) attachLatestSnapshots(parcels []models.Parcel) error 
 	var completed []struct {
 		ParcelID    uuid.UUID
 		SnapshotID  uuid.UUID
+		Methodology string
 		CompletedAt time.Time
 	}
 	err = r.db.Raw(`
-		SELECT DISTINCT ON (parcel_id) parcel_id, id AS snapshot_id, completed_at
-		FROM snapshots
-		WHERE parcel_id IN ? AND status = 'completed'
-		ORDER BY parcel_id, completed_at DESC`,
+		SELECT DISTINCT ON (s.parcel_id) s.parcel_id, s.id AS snapshot_id, m.slug AS methodology, s.completed_at
+		FROM snapshots s
+		JOIN methodologies m ON m.id = s.methodology_id
+		WHERE s.parcel_id IN ? AND s.status = 'completed'
+		ORDER BY s.parcel_id, s.completed_at DESC`,
 		ids,
 	).Scan(&completed).Error
 	if err != nil {
@@ -118,6 +120,7 @@ func (r *parcelRepository) attachLatestSnapshots(parcels []models.Parcel) error 
 	for _, c := range completed {
 		parcels[byParcel[c.ParcelID]].LatestResult = &models.SnapshotResult{
 			SnapshotID:   c.SnapshotID,
+			Methodology:  c.Methodology,
 			CompletedAt:  c.CompletedAt,
 			Measurements: measurements[c.SnapshotID],
 		}

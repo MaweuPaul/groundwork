@@ -30,7 +30,8 @@ type ActivityEvent struct {
 	SnapshotShortID *string     `json:"snapshot_short_id,omitempty"`
 	SeriesShortID   *string     `json:"series_short_id,omitempty"`
 	RecordHash      *string     `json:"record_hash,omitempty"`
-	NdviMean        *float64    `json:"ndvi_mean,omitempty"`
+	Methodology     *string     `json:"methodology,omitempty"` // slug, on completed snapshots
+	Measurements    jsonNumbers `json:"measurements,omitempty"`
 	Windows         *int        `json:"windows,omitempty"`
 	Flags           jsonStrings `json:"flags,omitempty"`
 	Detail          *string     `json:"detail,omitempty"`
@@ -38,21 +39,31 @@ type ActivityEvent struct {
 
 type jsonStrings []string
 
-func (s *jsonStrings) Scan(src any) error {
+func (s *jsonStrings) Scan(src any) error { return scanJSON(src, s) }
+
+type jsonNumbers map[string]float64
+
+func (n *jsonNumbers) Scan(src any) error { return scanJSON(src, n) }
+
+// scanJSON reads a jsonb column into dst; SQL NULL leaves dst at its zero value.
+func scanJSON(src, dst any) error {
 	switch v := src.(type) {
 	case nil:
-		*s = nil
 		return nil
 	case []byte:
-		return json.Unmarshal(v, s)
+		return json.Unmarshal(v, dst)
 	case string:
-		return json.Unmarshal([]byte(v), s)
+		return json.Unmarshal([]byte(v), dst)
 	}
-	return fmt.Errorf("jsonStrings: unsupported type %T", src)
+	return fmt.Errorf("%T: unsupported type %T", dst, src)
 }
 
-func (s jsonStrings) Value() (driver.Value, error) {
-	b, err := json.Marshal([]string(s))
+func (s jsonStrings) Value() (driver.Value, error) { return valueJSON(s) }
+
+func (n jsonNumbers) Value() (driver.Value, error) { return valueJSON(n) }
+
+func valueJSON(v any) (driver.Value, error) {
+	b, err := json.Marshal(v)
 	return string(b), err
 }
 
@@ -79,12 +90,12 @@ SELECT * FROM (
 	SELECT 'parcel_registered' AS kind, p.created_at AS at,
 		p.id AS parcel_id, p.short_id AS parcel_short_id, p.name AS parcel_name,
 		NULL::text AS snapshot_short_id, NULL::text AS series_short_id, NULL::text AS record_hash,
-		NULL::float8 AS ndvi_mean, NULL::int AS windows, NULL::jsonb AS flags, NULL::text AS detail
+		NULL::text AS methodology, NULL::jsonb AS measurements, NULL::int AS windows, NULL::jsonb AS flags, NULL::text AS detail
 	FROM owned p
 
 	UNION ALL
 	SELECT 'snapshot_queued', s.created_at, p.id, p.short_id, p.name,
-		s.short_id, NULL, NULL, NULL, NULL, NULL, NULL
+		s.short_id, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 	FROM snapshots s
 	JOIN owned p ON p.id = s.parcel_id
 	WHERE s.series_id IS NULL AND s.status IN ('pending', 'processing')
@@ -92,10 +103,11 @@ SELECT * FROM (
 	UNION ALL
 	SELECT 'snapshot_completed', s.completed_at, p.id, p.short_id, p.name,
 		s.short_id, NULL, s.record_hash,
-		(SELECT m.value::float8
+		(SELECT slug FROM methodologies WHERE id = s.methodology_id),
+		(SELECT jsonb_object_agg(mt.slug, m.value::float8)
 		 FROM measurements m
 		 JOIN measurement_types mt ON mt.id = m.measurement_type_id
-		 WHERE m.snapshot_id = s.id AND mt.slug = 'ndvi_mean'),
+		 WHERE m.snapshot_id = s.id),
 		NULL,
 		(SELECT jsonb_agg(f.flag ORDER BY f.flag) FROM snapshot_flags f WHERE f.snapshot_id = s.id),
 		NULL
@@ -105,7 +117,7 @@ SELECT * FROM (
 
 	UNION ALL
 	SELECT 'snapshot_failed', COALESCE(j.updated_at, s.created_at), p.id, p.short_id, p.name,
-		s.short_id, r.short_id, NULL, NULL, NULL, NULL, s.failure_message
+		s.short_id, r.short_id, NULL, NULL, NULL, NULL, NULL, s.failure_message
 	FROM snapshots s
 	JOIN owned p ON p.id = s.parcel_id
 	LEFT JOIN snapshot_jobs j ON j.snapshot_id = s.id
@@ -114,14 +126,14 @@ SELECT * FROM (
 
 	UNION ALL
 	SELECT 'series_started', r.created_at, p.id, p.short_id, p.name,
-		NULL, r.short_id, NULL, NULL,
+		NULL, r.short_id, NULL, NULL, NULL,
 		(SELECT count(*) FROM snapshots w WHERE w.series_id = r.id)::int, NULL, NULL
 	FROM snapshot_series r
 	JOIN owned p ON p.id = r.parcel_id
 
 	UNION ALL
 	SELECT 'series_sealed', r.sealed_at, p.id, p.short_id, p.name,
-		NULL, r.short_id, r.record_hash, NULL,
+		NULL, r.short_id, r.record_hash, NULL, NULL,
 		(SELECT count(*) FROM snapshots w WHERE w.series_id = r.id)::int, NULL, NULL
 	FROM snapshot_series r
 	JOIN owned p ON p.id = r.parcel_id

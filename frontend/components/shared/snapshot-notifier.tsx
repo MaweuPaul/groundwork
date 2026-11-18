@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { flagLabel } from '@/components/shared/flag-badge';
-import { formatNdvi } from '@/lib/format';
+import { resultSummary } from '@/lib/methodologies';
 import { parcelPath, snapshotPath } from '@/lib/paths';
 import type { ActivityEvent } from '@/lib/types';
 
@@ -35,6 +35,7 @@ function busy(events: ActivityEvent[]) {
 const reason = (message?: string) => message?.split(': ').slice(1).join(': ') || message;
 
 function ToastBody({ e }: { e: ActivityEvent }) {
+  const result = resultSummary(e.methodology, e.measurements);
   const parcel = parcelPath({ name: e.parcel_name, short_id: e.parcel_short_id });
   if (e.kind === 'snapshot_failed') {
     return (
@@ -70,10 +71,10 @@ function ToastBody({ e }: { e: ActivityEvent }) {
       <p className="font-semibold">Snapshot sealed</p>
       <p className="text-caption opacity-90">
         {e.parcel_name}
-        {e.ndvi_mean !== undefined && (
+        {result && (
           <>
             {' '}
-            · mean NDVI <span className="font-mono">{formatNdvi(e.ndvi_mean)}</span>
+            · <span className="font-mono">{result}</span>
           </>
         )}
         {e.flags?.length ? ` · ${e.flags.map(flagLabel).join(', ')}` : ''}

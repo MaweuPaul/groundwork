@@ -16,11 +16,13 @@ type Methodology struct {
 	IndexType        string         `gorm:"type:text;not null" json:"index_type"`
 	Satellite        string         `gorm:"type:text;not null" json:"satellite"`
 	Bands            pq.StringArray `gorm:"type:text[];not null" json:"bands"`
-	CloudMask        string         `gorm:"type:text;not null" json:"cloud_mask"`
+	CloudMask        *string        `gorm:"type:text" json:"cloud_mask"`
 	MaxCloudPct      float64        `gorm:"type:double precision;not null" json:"max_cloud_pct"`
 	CompositeMethod  string         `gorm:"type:text;not null" json:"composite_method"`
 	DateLookbackDays int            `gorm:"type:integer;not null" json:"date_lookback_days"`
-	CreatedAt        time.Time      `gorm:"type:timestamptz;not null;default:now()" json:"created_at"`
+	// First day the methodology's data covers; snapshots can't start earlier.
+	DataStart time.Time `gorm:"type:date;not null" json:"data_start"`
+	CreatedAt time.Time `gorm:"type:timestamptz;not null;default:now()" json:"created_at"`
 	// From methodology_parameters; filled by the repository's List.
 	Parameters []MethodologyParameter `gorm:"-" json:"parameters"`
 }

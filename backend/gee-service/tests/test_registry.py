@@ -8,6 +8,10 @@ def test_ndvi_is_registered():
     assert plugin_for("ndvi-s2-median").compute is not None
 
 
+def test_chirps_is_registered():
+    assert plugin_for("chirps-rain-season").compute is not None
+
+
 def test_unknown_methodology_fails_permanently():
     with pytest.raises(JobError) as err:
         plugin_for("water-history")

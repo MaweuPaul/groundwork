@@ -43,6 +43,7 @@ export type Parcel = {
   } | null;
   latest_result: {
     snapshot_id: string;
+    methodology: string; // slug
     completed_at: string;
     measurements: Record<string, number>;
   } | null;
@@ -94,8 +95,9 @@ export type Snapshot = {
   date_end: string;
   parameters: Record<string, number>;
   flags: SnapshotFlag[];
-  max_scene_cloud_pct: number;
-  cloud_score_threshold: number;
+  // Only NDVI snapshots have these; read parameters instead.
+  max_scene_cloud_pct: number | null;
+  cloud_score_threshold: number | null;
   record_format: number;
   geometry_hash: string;
   // Sealed from record format 4.
@@ -112,8 +114,16 @@ export type Snapshot = {
   prev_record_hash?: string;
   job?: SnapshotJob;
   measurements: Record<string, number>;
+  // Name, unit and description of each measurement, by slug.
+  measurement_types: Record<string, MeasurementType>;
   imagery_sources: ImagerySource[];
   ndvi_image?: NdviImage;
+};
+
+export type MeasurementType = {
+  name: string;
+  unit: string | null;
+  description: string | null;
 };
 
 // A quality warning raised by the worker and sealed with the record, e.g. low_coverage.
@@ -148,8 +158,9 @@ export type SnapshotSummary = {
   date_end: string;
   parameters: Record<string, number>;
   flags: SnapshotFlag[];
-  max_scene_cloud_pct: number;
-  cloud_score_threshold: number;
+  // Only NDVI snapshots have these; read parameters instead.
+  max_scene_cloud_pct: number | null;
+  cloud_score_threshold: number | null;
   created_at: string;
   completed_at?: string;
   chain_seq?: number;
@@ -173,8 +184,10 @@ export type SeriesSummary = {
   date_end: string;
   window_months: number;
   interval_months: number;
-  max_scene_cloud_pct: number;
-  cloud_score_threshold: number;
+  parameters: Record<string, number>;
+  // Only NDVI snapshots have these; read parameters instead.
+  max_scene_cloud_pct: number | null;
+  cloud_score_threshold: number | null;
   windows: number;
   completed: number;
   failed: number;
@@ -192,10 +205,11 @@ export type Methodology = {
   index_type: string;
   satellite: string;
   bands: string[];
-  cloud_mask: string;
+  cloud_mask: string | null;
   max_cloud_pct: number;
   composite_method: string;
   date_lookback_days: number;
+  data_start: string; // first day the methodology's data covers
   created_at: string;
   parameters: MethodologyParameter[];
 };
@@ -226,7 +240,8 @@ export type ActivityEvent = {
   snapshot_short_id?: string;
   series_short_id?: string;
   record_hash?: string;
-  ndvi_mean?: number;
+  methodology?: string; // slug, on completed snapshots
+  measurements?: Record<string, number>;
   windows?: number;
   flags?: string[];
   detail?: string;

@@ -1,6 +1,7 @@
 import { FlaskConical } from 'lucide-react';
 
 import Border from '@/components/shared/border';
+import { methodologyView } from '@/lib/methodologies';
 import type { Methodology, Snapshot } from '@/lib/types';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -29,19 +30,21 @@ const MethodologyPanel = ({ snapshot, methodology }: { snapshot: Snapshot; metho
         <Row label="Pipeline">
           {snapshot.methodology} v{snapshot.methodology_version}
         </Row>
-        {methodology && (
-          <>
-            <Row label="Sensor">{methodology.satellite}, Level-2A surface reflectance</Row>
-            <Row label="Bands">B4 (red), B8 (near-infrared)</Row>
-            <Row label="Composite">{methodology.composite_method}, NDVI = (B8 − B4) / (B8 + B4)</Row>
-          </>
-        )}
+        {methodologyView(snapshot.methodology)?.inputs.map(([label, value]) => (
+          <Row key={label} label={label}>
+            {value}
+          </Row>
+        ))}
         <Row label="Window">
           {snapshot.date_start} → {snapshot.date_end} (UTC, inclusive)
         </Row>
-        <Row label="Scene cloud limit">≤ {snapshot.max_scene_cloud_pct}% per scene</Row>
-        <Row label="Clear-pixel mask">Cloud Score+ cs_cdf ≥ {snapshot.cloud_score_threshold.toFixed(2)}</Row>
-        <Row label="Resolution">10 m</Row>
+        {Object.entries(snapshot.parameters ?? {})
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([name, value]) => (
+            <Row key={name} label={methodology?.parameters.find((p) => p.name === name)?.label ?? name}>
+              {value}
+            </Row>
+          ))}
         <Row label="Coordinates">WGS84 (EPSG:4326)</Row>
       </div>
 

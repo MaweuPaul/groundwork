@@ -160,5 +160,5 @@ used: a change is a new version.
 <sub>Source: [architecture-3.mmd](diagrams/architecture-3.mmd)</sub>
 
 Candidate methodologies from the agricultural
-assessment idea: `chirps-rain-season`, `s2-phenology`, `water-history`, `drainage-baseline`,
+assessment idea (`chirps-rain-season` is built): `s2-phenology`, `water-history`, `drainage-baseline`,
 `eudr-forest-check`.

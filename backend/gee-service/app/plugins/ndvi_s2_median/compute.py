@@ -9,7 +9,7 @@ A snapshot with less than min_clear_pct clear pixels still completes, flagged lo
 
 import json
 from dataclasses import replace
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 import ee
@@ -19,6 +19,7 @@ from app.errors import JobError
 from app.models import Job, Methodology
 from app.plugins.ndvi_s2_median import render
 from app.plugins.ndvi_s2_median.manifest import MANIFEST, SCALE_M
+from app.windows import end_exclusive
 
 S2_COLLECTION = "COPERNICUS/S2_SR_HARMONIZED"
 CLOUD_SCORE_COLLECTION = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"
@@ -51,11 +52,6 @@ def check_supported(m: Methodology) -> None:
             f"This worker can't compute {m.slug}@{m.version}.",
             retryable=False,
         )
-
-
-def end_exclusive(day: date) -> str:
-    """Snapshot windows include their end day; Earth Engine's filterDate excludes it."""
-    return (day + timedelta(days=1)).isoformat()
 
 
 def build_composite(

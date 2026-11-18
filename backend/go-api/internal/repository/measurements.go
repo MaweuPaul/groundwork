@@ -37,3 +37,36 @@ func measurementsBySnapshot(db *gorm.DB, snapshotIDs []uuid.UUID) (map[uuid.UUID
 	}
 	return out, nil
 }
+
+// MeasurementType says how to label a measurement and what it means, as published by the
+// methodology's migration.
+type MeasurementType struct {
+	Name        string  `json:"name"`
+	Unit        *string `json:"unit"`
+	Description *string `json:"description"`
+}
+
+// measurementTypesOf describes the measurements in values, by slug.
+func measurementTypesOf(db *gorm.DB, values map[string]float64) (map[string]MeasurementType, error) {
+	out := make(map[string]MeasurementType, len(values))
+	if len(values) == 0 {
+		return out, nil
+	}
+	slugs := make([]string, 0, len(values))
+	for slug := range values {
+		slugs = append(slugs, slug)
+	}
+
+	var rows []struct {
+		Slug string
+		MeasurementType
+	}
+	err := db.Raw(`SELECT slug, name, unit, description FROM measurement_types WHERE slug IN ?`, slugs).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.Slug] = row.MeasurementType
+	}
+	return out, nil
+}

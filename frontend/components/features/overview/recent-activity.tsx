@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Border from '@/components/shared/border';
 import { flagLabel } from '@/components/shared/flag-badge';
 import LocalTime from '@/components/shared/local-time';
-import { formatNdvi } from '@/lib/format';
+import { resultSummary } from '@/lib/methodologies';
 import { parcelPath, snapshotPath } from '@/lib/paths';
 import type { ActivityEvent } from '@/lib/types';
 
@@ -23,6 +23,7 @@ const dot: Record<ActivityEvent['kind'], string> = {
 const reason = (message?: string) => message?.split(': ').slice(1).join(': ') || message;
 
 function Sentence({ e }: { e: ActivityEvent }) {
+  const result = resultSummary(e.methodology, e.measurements);
   const parcel = (
     <Link
       href={parcelPath({ name: e.parcel_name, short_id: e.parcel_short_id })}
@@ -40,10 +41,10 @@ function Sentence({ e }: { e: ActivityEvent }) {
       return (
         <>
           Snapshot completed for {parcel}.
-          {e.ndvi_mean !== undefined && (
+          {result && (
             <>
               {' '}
-              Mean NDVI <span className="font-mono font-semibold">{formatNdvi(e.ndvi_mean)}</span> sealed.
+              <span className="font-mono font-semibold">{result}</span> sealed.
             </>
           )}
         </>

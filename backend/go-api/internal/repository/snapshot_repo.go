@@ -60,9 +60,11 @@ type SnapshotDetail struct {
 	PrevRecordHash *string            `json:"prev_record_hash,omitempty"`
 	Job            *SnapshotJobInfo   `json:"job,omitempty"`
 	Measurements   map[string]float64 `json:"measurements"` // type slug → value
-	ImagerySources []ImagerySourceRef `json:"imagery_sources"`
-	NdviImage      *NdviImageInfo     `json:"ndvi_image,omitempty"`
-	Artifacts      []ArtifactInfo     `json:"artifacts"`
+	// Name, unit and description of each measurement, by slug.
+	MeasurementTypes map[string]MeasurementType `json:"measurement_types"`
+	ImagerySources   []ImagerySourceRef         `json:"imagery_sources"`
+	NdviImage        *NdviImageInfo             `json:"ndvi_image,omitempty"`
+	Artifacts        []ArtifactInfo             `json:"artifacts"`
 }
 
 // SnapshotJobInfo is the queue progress shown to the client. The worker's raw
@@ -289,6 +291,9 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 	}
 	if m := measurements[id]; m != nil {
 		detail.Measurements = m
+	}
+	if detail.MeasurementTypes, err = measurementTypesOf(r.db, detail.Measurements); err != nil {
+		return nil, err
 	}
 
 	flags, err := flagsBySnapshot(r.db, []uuid.UUID{id})
