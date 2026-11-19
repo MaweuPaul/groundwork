@@ -29,6 +29,7 @@ const MASKS = [
 ];
 
 export type SnapshotOptions = {
+  methodology?: string; // "slug@version"; the first methodology when unset
   dateStart: string;
   dateEnd: string;
   parameters?: Record<string, number>;
@@ -236,7 +237,7 @@ const RunSnapshotDialog = ({
   note?: string;
   trigger?: React.ReactNode;
 }) => {
-  const first = methodologies[0];
+  const first = methodologies.find((m) => `${m.slug}@${m.version}` === initial?.methodology) ?? methodologies[0];
   const [open, setOpen] = useState(false);
   const [range] = useState(defaultRange);
   const [dateStart, setDateStart] = useState(initial?.dateStart ?? range.start);

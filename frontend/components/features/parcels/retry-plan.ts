@@ -3,7 +3,14 @@ import type { SnapshotSummary } from '@/lib/types';
 
 type RetrySource = Pick<
   SnapshotSummary,
-  'date_start' | 'date_end' | 'max_scene_cloud_pct' | 'cloud_score_threshold' | 'parameters' | 'failure_message'
+  | 'methodology'
+  | 'methodology_version'
+  | 'date_start'
+  | 'date_end'
+  | 'max_scene_cloud_pct'
+  | 'cloud_score_threshold'
+  | 'parameters'
+  | 'failure_message'
 >;
 
 // failure_message is "CODE: reason".
@@ -25,6 +32,12 @@ function daysBefore(day: string, days: number) {
   return result < EARLIEST ? EARLIEST : result;
 }
 
+function yearEarlier(day: string) {
+  const d = utc(day);
+  d.setUTCFullYear(d.getUTCFullYear() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 // Starts a short window 30 days before its end, so more satellite passes are included.
 function widened(dateStart: string, dateEnd: string) {
   if (windowDays(dateStart, dateEnd) >= MIN_WINDOW_DAYS) return dateStart;
@@ -35,6 +48,7 @@ function widened(dateStart: string, dateEnd: string) {
 // settings; anything else retries with the same ones.
 export function retryPlan(s: RetrySource): { initial: SnapshotOptions; note: string } {
   const same: SnapshotOptions = {
+    methodology: `${s.methodology}@${s.methodology_version}`,
     dateStart: s.date_start,
     dateEnd: s.date_end,
     parameters: { ...s.parameters },
@@ -48,11 +62,18 @@ export function retryPlan(s: RetrySource): { initial: SnapshotOptions; note: str
       note: `The ${days}-day window was too much imagery for one Earth Engine request. Suggested: the last ${MIN_WINDOW_DAYS} days of it. Run more short snapshots to cover the rest of the period.`,
     };
   }
-  if (code !== 'NO_IMAGERY' && code !== 'NO_CLEAR_PIXELS') {
+  // Rainfall published weeks late: the same season a year earlier is both available and comparable.
+  if (code === 'NO_IMAGERY' && s.failure_message?.includes('published')) {
+    return {
+      initial: { ...same, dateStart: yearEarlier(s.date_start), dateEnd: yearEarlier(s.date_end) },
+      note: 'These days aren’t published yet; CHIRPS arrives a few weeks after each month ends. Suggested: the same dates a year earlier.',
+    };
+  }
+  const scenePct = s.parameters?.max_scene_cloud_pct ?? s.max_scene_cloud_pct;
+  if ((code !== 'NO_IMAGERY' && code !== 'NO_CLEAR_PIXELS') || scenePct == null) {
     return { initial: same, note: 'Prefilled with the failed attempt’s settings. Adjust any of them before starting.' };
   }
 
-  const scenePct = s.parameters?.max_scene_cloud_pct ?? s.max_scene_cloud_pct;
   const cloudPct = Math.max(60, Math.min(100, scenePct * 2));
   const dateStart = widened(s.date_start, s.date_end);
   const changes = [`scenes up to ${cloudPct}% cloud (was ${scenePct}%)`];
