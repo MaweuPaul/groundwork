@@ -59,6 +59,8 @@ The Go integration tests also need a `groundwork_test` database and `TEST_DATABA
 | [docs/roadmap.md](docs/roadmap.md) | Phases, open decisions, planned work |
 | [docs/design/multi-analysis.md](docs/design/multi-analysis.md) | Design for many analyses as plugins (partly built) |
 
-## Licence note
+## Licence
+
+Proprietary, all rights reserved; see [LICENSE](LICENSE). Any use, including AI training, needs a written agreement.
 
 The free tiers used here, and Earth Engine's free quota, are for noncommercial use. A commercial product needs a paid Earth Engine licence.
