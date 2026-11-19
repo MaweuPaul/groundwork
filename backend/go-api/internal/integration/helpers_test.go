@@ -55,11 +55,15 @@ type methodologyRef struct {
 
 func ndvi(t *testing.T, tx *gorm.DB) methodologyRef {
 	t.Helper()
+	return methodology(t, tx, "ndvi-s2-median")
+}
+
+func methodology(t *testing.T, tx *gorm.DB, slug string) methodologyRef {
+	t.Helper()
 	var m methodologyRef
-	err := tx.Raw(`SELECT id, version FROM methodologies WHERE slug = 'ndvi-s2-median' AND version = '1.0.0'`).
-		Scan(&m).Error
+	err := tx.Raw(`SELECT id, version FROM methodologies WHERE slug = ? AND version = '1.0.0'`, slug).Scan(&m).Error
 	if err != nil || m.ID == uuid.Nil {
-		t.Fatalf("ndvi methodology not seeded: %v", err)
+		t.Fatalf("%s methodology not seeded: %v", slug, err)
 	}
 	return m
 }

@@ -1,14 +1,15 @@
 import { Satellite, TrendingUp } from 'lucide-react';
 import { notFound, redirect } from 'next/navigation';
 
-import NdviTrend, { type NdviPoint } from '@/components/features/parcels/ndvi-trend';
+import ParcelTrend, { type NdviPoint, type RainPoint } from '@/components/features/parcels/parcel-trend';
+import GroupsPanel from '@/components/features/parcels/groups-panel';
 import ParcelHeader from '@/components/features/parcels/parcel-header';
 import ParcelMap, { type NdviLayer } from '@/components/features/parcels/parcel-map';
 import SeriesPanel from '@/components/features/parcels/series-panel';
 import SnapshotHistory from '@/components/features/parcels/snapshot-history';
 import Border from '@/components/shared/border';
 import LiveRefresh from '@/components/shared/live-refresh';
-import { getMethodologies, getParcel, getParcelSeries, getParcelSnapshots } from '@/lib/api';
+import { getMethodologies, getParcel, getParcelGroups, getParcelSeries, getParcelSnapshots } from '@/lib/api';
 import { parcelPath, refFromSegment } from '@/lib/paths';
 
 export default async function ParcelPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -16,11 +17,12 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
   const ref = refFromSegment(slug);
   if (!ref) notFound();
 
-  const [parcel, snapshots, methodologies, series] = await Promise.all([
+  const [parcel, snapshots, methodologies, series, groups] = await Promise.all([
     getParcel(ref),
     getParcelSnapshots(ref),
     getMethodologies(),
     getParcelSeries(ref),
+    getParcelGroups(ref),
   ]);
 
   // The API answers 404 for both a missing parcel and someone else's.
@@ -35,6 +37,7 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
   if (!snapshots.ok) throw new Error(snapshots.error);
   if (!methodologies.ok) throw new Error(methodologies.error);
   if (!series.ok) throw new Error(series.error);
+  if (!groups.ok) throw new Error(groups.error);
 
   const inProgress = snapshots.data.some((s) => s.status === 'pending' || s.status === 'processing');
 
@@ -51,6 +54,19 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
       dateEnd: s.date_end,
       ndvi: s.measurements.ndvi_mean,
       validPixelPct: s.measurements.valid_pixel_pct,
+    }))
+    .sort((a, b) => a.dateEnd.localeCompare(b.dateEnd));
+
+  // A window with no normal (0 mm in every baseline year) has no % of normal to plot.
+  const rain: RainPoint[] = snapshots.data
+    .filter((s) => s.status === 'completed' && s.measurements.rain_pct_of_normal !== undefined)
+    .map((s) => ({
+      id: s.id,
+      dateStart: s.date_start,
+      dateEnd: s.date_end,
+      pctOfNormal: s.measurements.rain_pct_of_normal,
+      totalMm: s.measurements.rain_total_mm,
+      normalMm: s.measurements.rain_normal_mm,
     }))
     .sort((a, b) => a.dateEnd.localeCompare(b.dateEnd));
 
@@ -72,15 +88,18 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
           <div>
             <h2 className="flex items-center gap-2 text-h2 font-semibold">
               <TrendingUp className="size-5" />
-              NDVI time-series trend
+              Vegetation &amp; rainfall
             </h2>
             <p className="text-label text-muted-foreground">
-              Mean NDVI per completed snapshot, plotted at the end of each observation window.
+              Mean NDVI and rainfall against the 1991–2020 normal, each plotted at the end of its window on one time
+              axis, so a change in vegetation can be read against the rain.
             </p>
           </div>
-          <NdviTrend points={trend} />
+          <ParcelTrend ndvi={trend} rain={rain} />
         </Border>
       </div>
+
+      <GroupsPanel groups={groups.data} />
 
       <SeriesPanel series={series.data} />
 

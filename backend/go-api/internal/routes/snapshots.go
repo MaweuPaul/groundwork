@@ -14,6 +14,8 @@ func registerSnapshots(mux *http.ServeMux, a *app.App) {
 	mux.HandleFunc("GET /parcels/{id}/snapshots", a.Snapshots.ListForParcel)
 	mux.Handle("POST /parcels/{id}/series", middleware.RequireRole(models.RoleAssetHolder, http.HandlerFunc(a.Snapshots.CreateSeries)))
 	mux.HandleFunc("GET /parcels/{id}/series", a.Snapshots.ListSeriesForParcel)
+	mux.Handle("POST /parcels/{id}/groups", middleware.RequireRole(models.RoleAssetHolder, http.HandlerFunc(a.Snapshots.CreateGroup)))
+	mux.HandleFunc("GET /parcels/{id}/groups", a.Snapshots.ListGroupsForParcel)
 	mux.HandleFunc("GET /snapshots/{id}", a.Snapshots.Get)
 	mux.HandleFunc("GET /snapshots/{id}/ndvi.png", a.Snapshots.NdviImage)
 	mux.HandleFunc("GET /snapshots/{id}/artifacts/{key}", a.Snapshots.Artifact)

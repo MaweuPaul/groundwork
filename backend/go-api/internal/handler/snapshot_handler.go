@@ -74,24 +74,7 @@ func (h *SnapshotHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Parameters:         req.parameters(),
 	})
 
-	var invalid *service.ValidationError
-	var limit *repository.LimitError
-	switch {
-	case errors.Is(err, repository.ErrParcelNotFound):
-		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
-		return
-	case errors.Is(err, service.ErrUnknownMethodology):
-		httpx.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	case errors.As(err, &invalid):
-		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
-		return
-	case errors.As(err, &limit):
-		httpx.WriteError(w, limitStatus(limit), limit.Message)
-		return
-	case err != nil:
-		logging.From(r.Context()).Error("snapshots: create", "error", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+	if writeCreateError(w, r, err, "create") {
 		return
 	}
 
@@ -195,9 +178,68 @@ func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
 		IntervalMonths: req.IntervalMonths,
 	})
 
+	if !writeCreateError(w, r, err, "create series") {
+		httpx.WriteJSON(w, http.StatusAccepted, ref)
+	}
+}
+
+type createGroupRequest struct {
+	DateStart string `json:"date_start"`
+	DateEnd   string `json:"date_end"`
+	Members   []struct {
+		Methodology        string             `json:"methodology"`
+		MethodologyVersion string             `json:"methodology_version"`
+		Parameters         map[string]float64 `json:"parameters"`
+	} `json:"members"`
+}
+
+// CreateGroup queues a combined run: one snapshot per methodology, all for the same window,
+// sealed as a group once every member finishes. Answers 202 at once.
+func (h *SnapshotHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
+	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
+		return
+	}
+
+	var req createGroupRequest
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	members := make([]service.GroupMemberInput, len(req.Members))
+	for i, m := range req.Members {
+		members[i] = service.GroupMemberInput{Methodology: m.Methodology, MethodologyVersion: m.MethodologyVersion, Parameters: m.Parameters}
+	}
+	ref, err := h.service.CreateGroup(service.CreateGroupInput{
+		ParcelID:  parcelID,
+		OwnerID:   middleware.UserFrom(r.Context()).ID,
+		DateStart: req.DateStart,
+		DateEnd:   req.DateEnd,
+		Members:   members,
+	})
+	if !writeCreateError(w, r, err, "create group") {
+		httpx.WriteJSON(w, http.StatusAccepted, ref)
+	}
+}
+
+// ListGroupsForParcel returns a parcel's combined runs with their members and seals, newest first.
+func (h *SnapshotHandler) ListGroupsForParcel(w http.ResponseWriter, r *http.Request) {
+	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
+		return
+	}
+	groups, err := h.service.ListParcelGroups(parcelID, middleware.UserFrom(r.Context()).ID)
+	writeParcelList(w, r, groups, err, "list groups")
+}
+
+// writeCreateError answers a failed create and reports whether it did; nil writes nothing.
+func writeCreateError(w http.ResponseWriter, r *http.Request, err error, action string) bool {
 	var invalid *service.ValidationError
 	var limit *repository.LimitError
 	switch {
+	case err == nil:
+		return false
 	case errors.Is(err, repository.ErrParcelNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
 	case errors.Is(err, service.ErrUnknownMethodology):
@@ -206,11 +248,23 @@ func (h *SnapshotHandler) CreateSeries(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, invalid.Message)
 	case errors.As(err, &limit):
 		httpx.WriteError(w, limitStatus(limit), limit.Message)
+	default:
+		logging.From(r.Context()).Error("snapshots: "+action, "error", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
+	}
+	return true
+}
+
+// writeParcelList answers a list of one parcel's records; someone else's parcel is a 404.
+func writeParcelList(w http.ResponseWriter, r *http.Request, list any, err error, action string) {
+	switch {
+	case errors.Is(err, repository.ErrParcelNotFound):
+		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
 	case err != nil:
-		logging.From(r.Context()).Error("snapshots: create series", "error", err)
+		logging.From(r.Context()).Error("snapshots: "+action, "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
 	default:
-		httpx.WriteJSON(w, http.StatusAccepted, ref)
+		httpx.WriteJSON(w, http.StatusOK, list)
 	}
 }
 
@@ -221,19 +275,8 @@ func (h *SnapshotHandler) ListSeriesForParcel(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	user := middleware.UserFrom(r.Context())
-	series, err := h.service.ListParcelSeries(parcelID, user.ID)
-	if errors.Is(err, repository.ErrParcelNotFound) {
-		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
-		return
-	}
-	if err != nil {
-		logging.From(r.Context()).Error("snapshots: list series", "error", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
-		return
-	}
-
-	httpx.WriteJSON(w, http.StatusOK, series)
+	series, err := h.service.ListParcelSeries(parcelID, middleware.UserFrom(r.Context()).ID)
+	writeParcelList(w, r, series, err, "list series")
 }
 
 // ListForParcel returns a parcel's snapshot history, newest first.
@@ -243,19 +286,8 @@ func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	user := middleware.UserFrom(r.Context())
-	snapshots, err := h.service.ListParcelSnapshots(parcelID, user.ID)
-	if errors.Is(err, repository.ErrParcelNotFound) {
-		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
-		return
-	}
-	if err != nil {
-		logging.From(r.Context()).Error("snapshots: list for parcel", "error", err)
-		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")
-		return
-	}
-
-	httpx.WriteJSON(w, http.StatusOK, snapshots)
+	snapshots, err := h.service.ListParcelSnapshots(parcelID, middleware.UserFrom(r.Context()).ID)
+	writeParcelList(w, r, snapshots, err, "list for parcel")
 }
 
 func (h *SnapshotHandler) ListMethodologies(w http.ResponseWriter, r *http.Request) {

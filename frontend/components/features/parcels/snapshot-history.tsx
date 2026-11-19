@@ -92,6 +92,11 @@ const SnapshotHistory = ({
                         Series {s.series_short_id}
                       </span>
                     )}
+                    {s.group_short_id && (
+                      <span className="mt-1 block font-mono text-micro text-olive uppercase">
+                        Group {s.group_short_id}
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-4 font-mono text-label font-semibold whitespace-nowrap">
                     {resultSummary(s.methodology, s.measurements) ?? '—'}

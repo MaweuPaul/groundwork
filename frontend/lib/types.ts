@@ -172,9 +172,41 @@ export type SnapshotSummary = {
   measurements: Record<string, number>;
   ndvi_image?: NdviImage;
   series_short_id?: string;
+  group_short_id?: string;
 };
 
 export type NewSeries = NewSnapshot & { window_months: number; interval_months: number };
+
+// A combined run: several methodologies for the same window, each with its own settings.
+export type NewGroup = {
+  date_start: string;
+  date_end: string;
+  members: Pick<NewSnapshot, "methodology" | "methodology_version" | "parameters">[];
+};
+
+export type GroupRef = { id: string; short_id: string; members: number };
+
+// Sealed as a set, with one hash over every member's result, once every member finishes.
+export type GroupSummary = {
+  id: string;
+  short_id: string;
+  date_start: string;
+  date_end: string;
+  record_hash?: string;
+  sealed_at?: string;
+  created_at: string;
+  members: GroupMember[];
+};
+
+export type GroupMember = {
+  snapshot_id: string;
+  short_id: string;
+  methodology: string;
+  methodology_version: string;
+  status: SnapshotStatus;
+  record_hash?: string;
+  measurements: Record<string, number>;
+};
 
 export type SeriesRef = { id: string; short_id: string; windows: number };
 
