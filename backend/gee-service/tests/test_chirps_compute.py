@@ -70,6 +70,12 @@ def test_summarize_builds_measurements_and_sources():
     assert first.acquisition_time.date() == date(2025, 3, 1)
 
 
+def test_float_versions_are_sealed_as_integers():
+    days = [day(1, 0.0), day(2, 5.0), day(3, 1.0)]
+    days[0][2] = 1747258040794950.0
+    assert summarize(info(days=days), JOB).scenes[0].source_version == "1747258040794950"
+
+
 def test_days_out_of_order_are_sorted_before_counting_dry_spells():
     days = [day(3, 0.0), day(1, 0.0), day(2, 5.0)]
     assert summarize(info(days=days), JOB).measurements["longest_dry_spell_days"].value == 1

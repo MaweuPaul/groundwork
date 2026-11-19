@@ -46,6 +46,16 @@ class Scene:
     source_version: str | None = None
 
 
+def version_text(version: Any) -> str | None:
+    """A source version as sealed text. Earth Engine returns some whole-number versions as
+    floats (1747258040794950.0); they are written as integers so a version always reads the same."""
+    if version is None:
+        return None
+    if isinstance(version, float) and version.is_integer():
+        return str(int(version))
+    return str(version)
+
+
 @dataclass(frozen=True)
 class Artifact:
     """A file the methodology produces with its result, e.g. a map image. Stored with the

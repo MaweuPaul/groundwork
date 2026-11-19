@@ -14,7 +14,7 @@ from typing import Any
 
 import ee
 
-from app.contract import Measurement, Result, Scene
+from app.contract import Measurement, Result, Scene, version_text
 from app.errors import JobError
 from app.models import Job, Methodology
 from app.plugins.ndvi_s2_median import render
@@ -179,7 +179,7 @@ def summarize(info: dict[str, Any], job: Job) -> Result:
             provider=PROVIDER,
             processing_level=PROCESSING_LEVEL,
             asset_uri=f"{S2_COLLECTION}/{scene_id}",
-            source_version=None if version is None else str(version),
+            source_version=version_text(version),
         )
         for scene_id, time_start, cloud, spacecraft, product_id, version in rows
     ]

@@ -1,29 +1,43 @@
-import { Satellite } from 'lucide-react';
-
 import Border from '@/components/shared/border';
 import LocalTime from '@/components/shared/local-time';
+import { formatDate } from '@/lib/format';
+import { sourcesView } from '@/lib/methodologies';
 import type { ImagerySource, SnapshotStatus } from '@/lib/types';
 
-const columns = ['Scene identifier', 'Satellite', 'Acquired', 'Scene cloud'];
+const cell = 'px-5 py-3 font-mono text-caption';
 
-const ImageryTable = ({ sources, status }: { sources: ImagerySource[]; status: SnapshotStatus }) => {
+const ImageryTable = ({
+  sources,
+  status,
+  methodology,
+}: {
+  sources: ImagerySource[];
+  status: SnapshotStatus;
+  methodology: string;
+}) => {
+  const view = sourcesView(methodology);
+  const Icon = view.icon;
+  const columns = view.daily
+    ? ['Day (UTC)', 'Version']
+    : ['Scene identifier', 'Satellite', 'Acquired', 'Scene cloud', 'Version'];
+
   return (
     <Border className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 p-5">
         <h2 className="flex items-center gap-2 text-h2 font-semibold">
-          <Satellite className="size-5" />
-          Imagery sources
+          <Icon className="size-5" />
+          {view.title}
         </h2>
         <span className="rounded-sm bg-surface-container px-2 py-1 font-mono text-micro tracking-[0.08em] uppercase">
-          {sources.length} {sources.length === 1 ? 'scene' : 'scenes'} in the composite
+          {view.count(sources.length)}
         </span>
       </div>
 
       {sources.length === 0 ? (
         <p className="border-t border-border px-5 py-8 text-center text-label text-muted-foreground">
           {status === 'failed'
-            ? 'No scenes were recorded: the snapshot failed.'
-            : 'Scenes are listed once the snapshot completes.'}
+            ? 'No sources were recorded: the snapshot failed.'
+            : 'Sources are listed once the snapshot completes.'}
         </p>
       ) : (
         <div className="max-h-112 overflow-auto">
@@ -43,14 +57,20 @@ const ImageryTable = ({ sources, status }: { sources: ImagerySource[]; status: S
             <tbody className="divide-y divide-border">
               {sources.map((s) => (
                 <tr key={s.scene_id}>
-                  <td className="px-5 py-3 font-mono text-caption break-all">{s.scene_id}</td>
-                  <td className="px-5 py-3 font-mono text-caption whitespace-nowrap capitalize">{s.satellite}</td>
-                  <td className="px-5 py-3 font-mono text-caption whitespace-nowrap text-muted-foreground">
-                    <LocalTime iso={s.acquisition_time} />
-                  </td>
-                  <td className="px-5 py-3 font-mono text-caption">
-                    {s.cloud_cover_pct === undefined || s.cloud_cover_pct === null ? '—' : `${s.cloud_cover_pct.toFixed(1)}%`}
-                  </td>
+                  {view.daily ? (
+                    // A daily reading covers a UTC calendar day, so it is shown as that day, not a local time.
+                    <td className={`${cell} whitespace-nowrap`}>{formatDate(s.acquisition_time)}</td>
+                  ) : (
+                    <>
+                      <td className={`${cell} break-all`}>{s.scene_id}</td>
+                      <td className={`${cell} whitespace-nowrap capitalize`}>{s.satellite}</td>
+                      <td className={`${cell} whitespace-nowrap text-muted-foreground`}>
+                        <LocalTime iso={s.acquisition_time} />
+                      </td>
+                      <td className={cell}>{s.cloud_cover_pct == null ? '—' : `${s.cloud_cover_pct.toFixed(1)}%`}</td>
+                    </>
+                  )}
+                  <td className={`${cell} break-all text-muted-foreground`}>{s.source_version ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -58,10 +78,9 @@ const ImageryTable = ({ sources, status }: { sources: ImagerySource[]; status: S
         </div>
       )}
 
-      <p className="border-t border-border px-5 py-3 font-mono text-micro text-muted-foreground">
-        Copernicus Sentinel-2 Level-2A surface reflectance via Google Earth Engine. Scene cloud is the whole tile&apos;s
-        estimate; clouds over the parcel were masked per pixel with Cloud Score+.
-      </p>
+      {view.note && (
+        <p className="border-t border-border px-5 py-3 font-mono text-micro text-muted-foreground">{view.note}</p>
+      )}
     </Border>
   );
 };

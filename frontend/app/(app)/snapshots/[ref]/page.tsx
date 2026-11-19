@@ -114,7 +114,7 @@ export default async function SnapshotPage({ params }: { params: Promise<{ ref: 
           </div>
 
           <MeasurementsPanel snapshot={s} />
-          <ImageryTable sources={s.imagery_sources} status={s.status} />
+          <ImageryTable sources={s.imagery_sources} status={s.status} methodology={s.methodology} />
         </div>
 
         <div className="xl:sticky xl:top-20 xl:self-start">

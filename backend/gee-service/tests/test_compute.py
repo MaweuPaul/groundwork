@@ -152,3 +152,9 @@ def test_a_failed_map_image_is_flagged_and_the_snapshot_still_completes(monkeypa
     assert result.artifacts == []
     assert result.measurements == measured.measurements
     assert result.flags["map_image_failed"] == "computePixels: too many pixels"
+
+
+def test_float_versions_are_sealed_as_integers():
+    scene = [*SCENE[:5], float(SCENE[5])]
+    (s,) = summarize(info(scenes=[scene]), JOB).scenes
+    assert s.source_version == str(SCENE[5])

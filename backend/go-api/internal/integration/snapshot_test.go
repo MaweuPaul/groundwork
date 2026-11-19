@@ -88,6 +88,9 @@ func TestSnapshotLifecycleSealsRecordV4(t *testing.T) {
 	if detail.Parameters["min_clear_pct"] != 40 || len(detail.Flags) != 1 || detail.Flags[0].Flag != "low_coverage" {
 		t.Errorf("detail parameters %v, flags %+v", detail.Parameters, detail.Flags)
 	}
+	if src := detail.ImagerySources; len(src) == 1 && (src[0].SourceVersion == nil || *src[0].SourceVersion == "") {
+		t.Errorf("source %s has no version", src[0].SceneID)
+	}
 	if detail.Measurements["valid_pixel_pct"] != 87.5 || len(detail.ImagerySources) != 1 {
 		t.Errorf("detail measurements %v, sources %d", detail.Measurements, len(detail.ImagerySources))
 	}
