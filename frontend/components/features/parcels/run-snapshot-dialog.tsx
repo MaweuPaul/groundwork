@@ -18,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { methodologyView } from '@/lib/methodologies';
 import type { Methodology, MethodologyParameter } from '@/lib/types';
 
 // Cloud Score+ cs_cdf a pixel needs to count as clear.
@@ -38,12 +39,11 @@ const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 const MONTH_CHOICES = [1, 2, 3, 6, 12];
 
 const HELP = {
-  window:
-    'The dates of imagery to use. Every clear Sentinel-2 view of the parcel in this range is combined into one median picture, so short gaps in coverage don’t matter.',
+  window: 'The dates to measure, start and end included. Everything the methodology uses in this range goes into one result.',
   series:
     'The whole period to cover. It is split into windows below; each becomes its own snapshot.',
   windowLength:
-    'How much imagery goes into each data point. Longer windows have more clear views but blur changes within them.',
+    'How much data goes into each point. Longer windows smooth out short gaps but blur changes within them.',
   interval:
     'How far apart the windows start. Equal to the window length gives back-to-back readings with no gaps; larger skips the months in between, e.g. 2 months every 12 compares the same season each year.',
   methodology:
@@ -52,6 +52,8 @@ const HELP = {
     'Sentinel-2 rates each whole scene (~100 × 100 km) by cloud cover. Scenes above this limit are skipped. Clouds over your parcel are still removed pixel by pixel, so a higher limit often finds clear views in rainy seasons.',
   mask:
     'How sure Cloud Score+ must be that a pixel is clear before it is used. Strict avoids haze but keeps fewer pixels; lenient keeps more in cloudy seasons.',
+  rainyDay:
+    'A day with at least this much rain counts as rainy; less counts as dry. It sets the rainy-day count and the longest dry spell. 1 mm is the common standard.',
   minClear:
     'If less of the parcel than this is clear after masking, the snapshot still completes but is flagged low coverage, so readers know its values come from only part of the parcel.',
 };
@@ -81,6 +83,12 @@ const EXTRAS: Record<string, Extra> = {
     presets: [25, 50, 75],
     help: HELP.minClear,
     note: 'Below this, the snapshot is still sealed but flagged low coverage. It never fails for it.',
+  },
+  rainy_day_mm: {
+    label: 'Rainy day threshold',
+    unit: 'mm',
+    presets: [1, 2, 5],
+    help: HELP.rainyDay,
   },
 };
 
@@ -330,7 +338,7 @@ const RunSnapshotDialog = ({
                 <span className="flex items-center gap-1.5">
                   {mode === 'series' ? 'Series range' : 'Observation window'}
                   <InfoTip label={mode === 'series' ? 'the series range' : 'the observation window'}>
-                    {mode === 'series' ? HELP.series : HELP.window}
+                    {mode === 'series' ? HELP.series : (methodologyView(selected?.slug)?.windowHelp ?? HELP.window)}
                   </InfoTip>
                 </span>
                 <span className="font-mono text-micro font-normal text-muted-foreground">

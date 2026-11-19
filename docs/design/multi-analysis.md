@@ -45,8 +45,7 @@ way down to individual satellite scenes.
 | Earth Engine batch exports | Jobs over the 5-minute limit for one request |
 
 Migration path: the cloud columns already became NDVI's `parameters` (record format v3).
-`snapshot_ndvi_images` became `artifacts` (format v5); the old table is dropped once no running
-service reads it. Existing records keep the format they were sealed with and still verify.
+`snapshot_ndvi_images` became `artifacts` (format v5) and was dropped in migration 018. Existing records keep the format they were sealed with and still verify.
 
 ## 4. How a combined analysis runs (rainfall-adjusted productivity)
 
