@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { ACCESS_COOKIE } from "@/lib/session";
 import type {
   ActivityEvent,
+  ChainCheck,
   Methodology,
   NewParcel,
   NewSeries,
@@ -98,6 +99,8 @@ export const createGroup = (parcelId: string, group: NewGroup) =>
   api<GroupRef>(`/parcels/${id(parcelId)}/groups`, { method: "POST", body: group });
 
 export const getParcelGroups = (parcelId: string) => api<GroupSummary[]>(`/parcels/${id(parcelId)}/groups`);
+
+export const verifyParcel = (parcelId: string) => api<ChainCheck>(`/parcels/${id(parcelId)}/verify`);
 
 export const getParcelSnapshots = (parcelId: string) =>
   api<SnapshotSummary[]>(`/parcels/${id(parcelId)}/snapshots`);

@@ -208,6 +208,26 @@ export type GroupMember = {
   measurements: Record<string, number>;
 };
 
+// Every sealed record and group of a parcel, recomputed from what is stored now.
+export type ChainCheck = {
+  intact: boolean;
+  records: number;
+  groups: number;
+  head_seq: number | null;
+  head_hash: string | null;
+  problems: ChainProblem[];
+  checked_at: string;
+};
+
+// Names the record or group that failed; a broken chain head has neither.
+export type ChainProblem = {
+  seq?: number;
+  snapshot_id?: string;
+  short_id?: string;
+  group_short_id?: string;
+  problem: string;
+};
+
 export type SeriesRef = { id: string; short_id: string; windows: number };
 
 // A time series: one snapshot per window, sealed as a set once every window finishes.

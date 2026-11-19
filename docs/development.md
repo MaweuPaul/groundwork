@@ -107,8 +107,13 @@ This repository is a monorepo containing the frontend and two separate backend s
 /
 ├── frontend/                    # Next.js / React application
 │   ├── app/(auth)/              # Sign-in and create-account screens
-│   └── app/(app)/               # Overview, parcels, register parcel, snapshot pages
-├── docs/                        # Architecture, design proposals, diagrams
+│   ├── app/(app)/               # Overview, parcels, register parcel, snapshot pages (login required)
+│   ├── app/api/                 # Small proxies for browser polling (activity feed, NDVI image)
+│   ├── components/features/     # Components for one area: parcels, snapshots, overview, header
+│   ├── components/shared/       # Components used across pages
+│   ├── components/ui/           # Base UI primitives (buttons, dialogs, inputs)
+│   └── lib/                     # API client, types, per-methodology presentation, map and format helpers
+├── docs/                        # Architecture, guides, design proposals, diagrams
 └── backend/
     ├── go-api/                  # Go + PostGIS API
     │   ├── cmd/
@@ -127,8 +132,13 @@ This repository is a monorepo containing the frontend and two separate backend s
     │   │   ├── ratelimit/       # In-memory token buckets for login and sign-up limits
     │   │   ├── repository/      # DB operations
     │   │   ├── routes/          # One file per feature; auth applied once to the protected group
-    │   │   └── service/         # Business logic (auth, tokens, parcels)
+    │   │   └── service/         # Business logic: validation and rules (auth, parcels, snapshots, series, groups)
     │   ├── migrations/          # Numbered SQL migrations (001_, 002_, ...); the only place the schema changes
     │   └── .env.example         # Example environment variables
     └── gee-service/             # Python Earth Engine worker: all satellite calculations
+        ├── app/worker.py        # Listens for jobs, runs the plugin, saves the result
+        ├── app/queue.py         # Claims, completes and fails jobs through the database's queue functions
+        ├── app/contract.py      # What a plugin receives and returns
+        ├── app/plugins/         # One folder per methodology: manifest.py, compute.py
+        └── tests/
 ```

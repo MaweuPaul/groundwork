@@ -95,6 +95,7 @@ type SnapshotRepository interface {
 	CreateGroupWithJobs(in NewGroup) (GroupRef, error)
 	ListGroupsByParcelForOwner(parcelID, ownerID uuid.UUID) ([]GroupSummary, error)
 	ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SeriesSummary, error)
+	VerifyParcelForOwner(parcelID, ownerID uuid.UUID) (*ChainCheck, error)
 }
 
 type snapshotRepository struct {
