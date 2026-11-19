@@ -79,6 +79,8 @@ export type ImagerySource = {
   satellite: string;
   acquisition_time: string;
   cloud_cover_pct?: number;
+  // The provider's version of the source when it was read; sealed from record format 3.
+  source_version?: string;
 };
 
 export type Snapshot = {

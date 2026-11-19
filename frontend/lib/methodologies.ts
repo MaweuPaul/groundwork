@@ -1,4 +1,4 @@
-import { CloudRain, type LucideIcon, Sprout } from 'lucide-react';
+import { CalendarDays, CloudRain, type LucideIcon, Satellite, Sprout } from 'lucide-react';
 
 // How each methodology's results are shown. Names, units and descriptions of measurements come
 // from the API; this only adds what the database doesn't say: which result headlines a row,
@@ -13,6 +13,17 @@ type MethodologyView = {
   order: string[];
   summary: (m: Record<string, number>) => string | undefined;
   inputs: [label: string, value: string][];
+  sources: SourcesView;
+};
+
+// How the sources a snapshot was computed from are listed.
+export type SourcesView = {
+  title: string;
+  icon: LucideIcon;
+  count: (n: number) => string;
+  // One reading per UTC day: list the day, without a time or cloud cover.
+  daily: boolean;
+  note?: string;
 };
 
 const views: Record<string, MethodologyView> = {
@@ -34,6 +45,13 @@ const views: Record<string, MethodologyView> = {
       ['Composite', 'median, NDVI = (B8 − B4) / (B8 + B4)'],
       ['Resolution', '10 m'],
     ],
+    sources: {
+      title: 'Imagery sources',
+      icon: Satellite,
+      count: (n) => `${n} ${n === 1 ? 'scene' : 'scenes'} in the composite`,
+      daily: false,
+      note: 'Copernicus Sentinel-2 Level-2A surface reflectance via Google Earth Engine. Scene cloud is the whole tile’s estimate; clouds over the parcel were masked per pixel with Cloud Score+.',
+    },
   },
   'chirps-rain-season': {
     title: 'Rainfall measurements',
@@ -52,10 +70,26 @@ const views: Record<string, MethodologyView> = {
       ['Normal', 'Same calendar window, 1991–2020'],
       ['Resolution', '~5.5 km (0.05°); values describe the area around the parcel'],
     ],
+    sources: {
+      title: 'Rainfall data',
+      icon: CalendarDays,
+      count: (n) => `${n} daily ${n === 1 ? 'reading' : 'readings'}`,
+      daily: true,
+      note: 'CHIRPS daily rainfall from the UCSB Climate Hazards Center, via Google Earth Engine. Each day’s grid was averaged over the parcel; the version is the one Earth Engine reported when it was read.',
+    },
   },
 };
 
 export const methodologyView = (slug: string | undefined) => (slug ? views[slug] : undefined);
+
+const genericSources: SourcesView = {
+  title: 'Sources',
+  icon: Satellite,
+  count: (n) => `${n} ${n === 1 ? 'source' : 'sources'}`,
+  daily: false,
+};
+
+export const sourcesView = (slug: string | undefined) => methodologyView(slug)?.sources ?? genericSources;
 
 // One-line result for tables and notices, e.g. "NDVI 0.742 · 90% clear" or "575 mm · 155% of normal".
 export const resultSummary = (slug: string | undefined, measurements: Record<string, number> | undefined) =>

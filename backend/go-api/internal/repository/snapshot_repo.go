@@ -82,6 +82,8 @@ type ImagerySourceRef struct {
 	Satellite       string    `json:"satellite"`
 	AcquisitionTime time.Time `json:"acquisition_time"`
 	CloudCoverPct   *float64  `json:"cloud_cover_pct,omitempty"`
+	// The provider's version of the source when it was read; sealed from record format v3.
+	SourceVersion *string `json:"source_version,omitempty"`
 }
 
 type SnapshotRepository interface {
@@ -303,7 +305,7 @@ func (r *snapshotRepository) GetByIDForOwner(id, ownerID uuid.UUID) (*SnapshotDe
 	detail.Flags = flagsOrEmpty(flags[id])
 
 	err = r.db.Raw(`
-		SELECT scene_id, satellite, acquisition_time, cloud_cover_pct
+		SELECT scene_id, satellite, acquisition_time, cloud_cover_pct, source_version
 		FROM imagery_sources
 		WHERE snapshot_id = ?
 		ORDER BY acquisition_time, scene_id`,
