@@ -1,0 +1,25 @@
+Copyright (c) 2026 Paul Maweu. All rights reserved.
+
+Groundwork is proprietary software. This repository and everything in it,
+including source code, documentation, database schema, methodologies,
+architecture and designs, is owned by the copyright holder.
+
+That this repository can be viewed publicly does not grant any licence. Apart
+from the rights GitHub's Terms of Service give to view and fork it on GitHub,
+no one may use, copy, modify, merge, publish, distribute, sublicense or sell
+any part of it, or use it to train, evaluate or fine-tune machine learning or
+AI models, or include it in any dataset, without a separate written agreement
+signed by the copyright holder.
+
+Any such agreement is non-exclusive unless it says otherwise, and does not
+transfer ownership of the software or of any intellectual property in it.
+
+Third-party libraries and data used by Groundwork remain under their own
+licences and are not covered by this notice.
+
+To ask about a licence, contact the copyright holder through
+https://github.com/MaweuPaul.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.

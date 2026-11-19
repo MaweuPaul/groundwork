@@ -5,6 +5,9 @@
 # Service account keys (Earth Engine) live here; never commit them
 backend/gee-service/credentials/
 
+# Private contracts and licence agreements
+legal/
+
 # Go workspace
 .cache/
 *.exe
