@@ -1,6 +1,6 @@
 # Groundwork
 
-Groundwork is an independent verification layer for land claims. It replaces trust in paperwork with trust in reproducible satellite data: it tracks parcel boundaries, measures vegetation (NDVI) from Sentinel-2 imagery through Google Earth Engine with versioned methodologies, and seals every result into a tamper-evident hash chain per parcel.
+Groundwork is an independent verification layer for land claims. It replaces trust in paperwork with trust in reproducible satellite data: it tracks parcel boundaries, measures vegetation (NDVI, from Sentinel-2) and seasonal rainfall (CHIRPS) through Google Earth Engine with versioned methodologies, and seals every result into a tamper-evident hash chain per parcel that can be rechecked at any time.
 
 ## How it fits together
 
@@ -52,6 +52,8 @@ The Go integration tests also need a `groundwork_test` database and `TEST_DATABA
 
 | Doc | Covers |
 |---|---|
+| [docs/verification.md](docs/verification.md) | For auditors: what a sealed record is, how to check it, what a check proves |
+| [docs/codebase-guide.md](docs/codebase-guide.md) | A tour of the code: one request end to end, where changes go, the rules |
 | [docs/development.md](docs/development.md) | Full setup, every setting, tests, project structure |
 | [docs/api.md](docs/api.md) | Endpoints, limits and errors |
 | [docs/architecture.md](docs/architecture.md) | Concepts, the snapshot pipeline, the hash chain, the Go ↔ Python contract, plugins |

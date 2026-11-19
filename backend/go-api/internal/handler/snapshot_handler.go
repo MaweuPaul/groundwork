@@ -230,7 +230,18 @@ func (h *SnapshotHandler) ListGroupsForParcel(w http.ResponseWriter, r *http.Req
 		return
 	}
 	groups, err := h.service.ListParcelGroups(parcelID, middleware.UserFrom(r.Context()).ID)
-	writeParcelList(w, r, groups, err, "list groups")
+	writeParcelRead(w, r, groups, err, "list groups")
+}
+
+// VerifyParcel recomputes every sealed record and group of the parcel and reports any that no
+// longer match what is stored.
+func (h *SnapshotHandler) VerifyParcel(w http.ResponseWriter, r *http.Request) {
+	parcelID, ok := resolveRef(w, r, h.refs.ParcelID, "parcel not found")
+	if !ok {
+		return
+	}
+	check, err := h.service.VerifyParcel(parcelID, middleware.UserFrom(r.Context()).ID)
+	writeParcelRead(w, r, check, err, "verify parcel")
 }
 
 // writeCreateError answers a failed create and reports whether it did; nil writes nothing.
@@ -255,8 +266,8 @@ func writeCreateError(w http.ResponseWriter, r *http.Request, err error, action 
 	return true
 }
 
-// writeParcelList answers a list of one parcel's records; someone else's parcel is a 404.
-func writeParcelList(w http.ResponseWriter, r *http.Request, list any, err error, action string) {
+// writeParcelRead answers a read of one parcel's records; someone else's parcel is a 404.
+func writeParcelRead(w http.ResponseWriter, r *http.Request, list any, err error, action string) {
 	switch {
 	case errors.Is(err, repository.ErrParcelNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "parcel not found")
@@ -276,7 +287,7 @@ func (h *SnapshotHandler) ListSeriesForParcel(w http.ResponseWriter, r *http.Req
 	}
 
 	series, err := h.service.ListParcelSeries(parcelID, middleware.UserFrom(r.Context()).ID)
-	writeParcelList(w, r, series, err, "list series")
+	writeParcelRead(w, r, series, err, "list series")
 }
 
 // ListForParcel returns a parcel's snapshot history, newest first.
@@ -287,7 +298,7 @@ func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) 
 	}
 
 	snapshots, err := h.service.ListParcelSnapshots(parcelID, middleware.UserFrom(r.Context()).ID)
-	writeParcelList(w, r, snapshots, err, "list for parcel")
+	writeParcelRead(w, r, snapshots, err, "list for parcel")
 }
 
 func (h *SnapshotHandler) ListMethodologies(w http.ResponseWriter, r *http.Request) {

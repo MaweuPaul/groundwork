@@ -60,6 +60,10 @@ func (f *fakeSnapshotRepo) ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUI
 	return nil, nil
 }
 
+func (f *fakeSnapshotRepo) VerifyParcelForOwner(parcelID, ownerID uuid.UUID) (*repository.ChainCheck, error) {
+	return nil, nil
+}
+
 type fakeMethodologyRepo struct {
 	m      *models.Methodology
 	params []models.MethodologyParameter

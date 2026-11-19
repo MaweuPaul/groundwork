@@ -1,6 +1,7 @@
 import { Satellite, TrendingUp } from 'lucide-react';
 import { notFound, redirect } from 'next/navigation';
 
+import ChainCheck from '@/components/features/parcels/chain-check';
 import ParcelTrend, { type NdviPoint, type RainPoint } from '@/components/features/parcels/parcel-trend';
 import GroupsPanel from '@/components/features/parcels/groups-panel';
 import ParcelHeader from '@/components/features/parcels/parcel-header';
@@ -109,6 +110,8 @@ export default async function ParcelPage({ params }: { params: Promise<{ slug: s
         parcelName={parcel.data.name}
         methodologies={methodologies.data}
       />
+
+      <ChainCheck parcelId={parcel.data.id} />
     </main>
   );
 }

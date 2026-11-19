@@ -47,6 +47,7 @@ type SnapshotService interface {
 	ListParcelSeries(parcelID, ownerID uuid.UUID) ([]repository.SeriesSummary, error)
 	CreateGroup(in CreateGroupInput) (repository.GroupRef, error)
 	ListParcelGroups(parcelID, ownerID uuid.UUID) ([]repository.GroupSummary, error)
+	VerifyParcel(parcelID, ownerID uuid.UUID) (*repository.ChainCheck, error)
 }
 
 type snapshotService struct {
@@ -58,6 +59,11 @@ type snapshotService struct {
 
 func NewSnapshotService(snapshots repository.SnapshotRepository, methodologies repository.MethodologyRepository, limits repository.Limits) SnapshotService {
 	return &snapshotService{snapshots: snapshots, methodologies: methodologies, limits: limits, now: time.Now}
+}
+
+// VerifyParcel returns repository.ErrParcelNotFound for someone else's parcel.
+func (s *snapshotService) VerifyParcel(parcelID, ownerID uuid.UUID) (*repository.ChainCheck, error) {
+	return s.snapshots.VerifyParcelForOwner(parcelID, ownerID)
 }
 
 // GetArtifact returns one of the snapshot's artifacts, or nil when there is none or it isn't the owner's.

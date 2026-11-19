@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { createGroup, createSeries, createSnapshot } from '@/lib/api';
+import { type ApiResult, createGroup, createSeries, createSnapshot, verifyParcel } from '@/lib/api';
+import type { ChainCheck } from '@/lib/types';
 import { PARAM_PREFIX } from '@/lib/snapshot-form';
 
 export type SnapshotFormState = {
@@ -63,4 +64,8 @@ export async function runSnapshotAction(
 
   revalidatePath('/parcels/[slug]', 'page');
   return { ok: true };
+}
+
+export async function verifyChainAction(parcelId: string): Promise<ApiResult<ChainCheck>> {
+  return verifyParcel(parcelId);
 }
