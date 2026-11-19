@@ -16,6 +16,7 @@ import (
 type fakeSnapshotRepo struct {
 	got       *repository.NewSnapshot
 	gotSeries *repository.NewSeries
+	gotGroup  *repository.NewGroup
 	id        uuid.UUID
 	err       error
 	calls     int
@@ -45,6 +46,16 @@ func (f *fakeSnapshotRepo) CreateSeriesWithJobs(in repository.NewSeries) (reposi
 	return repository.SeriesRef{ID: f.id, Windows: len(in.Windows)}, f.err
 }
 
+func (f *fakeSnapshotRepo) CreateGroupWithJobs(in repository.NewGroup) (repository.GroupRef, error) {
+	f.calls++
+	f.gotGroup = &in
+	return repository.GroupRef{ID: f.id, Members: len(in.Members)}, f.err
+}
+
+func (f *fakeSnapshotRepo) ListGroupsByParcelForOwner(parcelID, ownerID uuid.UUID) ([]repository.GroupSummary, error) {
+	return nil, nil
+}
+
 func (f *fakeSnapshotRepo) ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUID) ([]repository.SeriesSummary, error) {
 	return nil, nil
 }
@@ -53,6 +64,8 @@ type fakeMethodologyRepo struct {
 	m      *models.Methodology
 	params []models.MethodologyParameter
 	err    error
+	// More methodologies, each with its own parameters.
+	others map[*models.Methodology][]models.MethodologyParameter
 }
 
 func (f *fakeMethodologyRepo) GetBySlugVersion(slug, version string) (*models.Methodology, error) {
@@ -62,6 +75,11 @@ func (f *fakeMethodologyRepo) GetBySlugVersion(slug, version string) (*models.Me
 	if f.m != nil && f.m.Slug == slug && f.m.Version == version {
 		return f.m, nil
 	}
+	for m := range f.others {
+		if m.Slug == slug && m.Version == version {
+			return m, nil
+		}
+	}
 	return nil, nil
 }
 
@@ -70,6 +88,11 @@ func (f *fakeMethodologyRepo) List() ([]models.Methodology, error) {
 }
 
 func (f *fakeMethodologyRepo) Parameters(methodologyID uuid.UUID) ([]models.MethodologyParameter, error) {
+	for m, params := range f.others {
+		if m.ID == methodologyID {
+			return params, nil
+		}
+	}
 	if f.params == nil {
 		return ndviParams, nil
 	}
@@ -286,5 +309,94 @@ func TestCreateSnapshotChecksTheMethodologysOwnDataStart(t *testing.T) {
 	var invalid *ValidationError
 	if !errors.As(err, &invalid) || !strings.Contains(invalid.Message, "1981-01-01") {
 		t.Fatalf("err = %v, want a ValidationError naming 1981-01-01", err)
+	}
+}
+
+var rainParams = []models.MethodologyParameter{
+	{Name: "rainy_day_mm", Label: "Rainy day threshold (mm)", Type: "number", Min: 0.1, Max: 20, Default: 1},
+}
+
+func bothMethodologies() *fakeMethodologyRepo {
+	return &fakeMethodologyRepo{m: ndvi, others: map[*models.Methodology][]models.MethodologyParameter{chirps: rainParams}}
+}
+
+func validGroup() CreateGroupInput {
+	return CreateGroupInput{
+		ParcelID:  uuid.New(),
+		OwnerID:   uuid.New(),
+		DateStart: "2025-01-01",
+		DateEnd:   "2025-04-30",
+		Members: []GroupMemberInput{
+			{Methodology: "ndvi-s2-median", MethodologyVersion: "1.0.0"},
+			{Methodology: "chirps-rain-season", MethodologyVersion: "1.0.0", Parameters: map[string]float64{"rainy_day_mm": 5}},
+		},
+	}
+}
+
+func TestCreateGroupQueuesEveryMemberWithItsOwnParameters(t *testing.T) {
+	snaps := &fakeSnapshotRepo{id: uuid.New()}
+	ref, err := newTestSnapshotService(snaps, bothMethodologies()).CreateGroup(validGroup())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ref.Members != 2 || snaps.calls != 1 {
+		t.Fatalf("ref = %+v after %d calls", ref, snaps.calls)
+	}
+
+	g := snaps.gotGroup
+	if g.DateStart.Format(time.DateOnly) != "2025-01-01" || g.DateEnd.Format(time.DateOnly) != "2025-04-30" {
+		t.Errorf("dates = %s..%s", g.DateStart.Format(time.DateOnly), g.DateEnd.Format(time.DateOnly))
+	}
+	if g.Members[0].MethodologyID != ndvi.ID || g.Members[0].Parameters["max_scene_cloud_pct"] != 20 {
+		t.Errorf("ndvi member = %+v", g.Members[0])
+	}
+	if g.Members[1].MethodologyID != chirps.ID || !reflect.DeepEqual(g.Members[1].Parameters, repository.Parameters{"rainy_day_mm": 5}) {
+		t.Errorf("rainfall member = %+v", g.Members[1])
+	}
+}
+
+func TestCreateGroupRejectsBadInput(t *testing.T) {
+	tests := []struct {
+		name   string
+		modify func(*CreateGroupInput)
+		want   string
+	}{
+		{"one member", func(in *CreateGroupInput) { in.Members = in.Members[:1] }, "2 to 5"},
+		{"six members", func(in *CreateGroupInput) {
+			for len(in.Members) < 6 {
+				in.Members = append(in.Members, in.Members[0])
+			}
+		}, "2 to 5"},
+		{"same methodology twice", func(in *CreateGroupInput) { in.Members[1] = in.Members[0] }, "more than once"},
+		{"missing version", func(in *CreateGroupInput) { in.Members[1].MethodologyVersion = "" }, "methodology_version"},
+		{"before Sentinel-2 for NDVI", func(in *CreateGroupInput) { in.DateStart, in.DateEnd = "2010-03-01", "2010-05-31" }, "2015-06-23"},
+		{"parameter of the other methodology", func(in *CreateGroupInput) {
+			in.Members[1].Parameters = map[string]float64{"max_scene_cloud_pct": 50}
+		}, "unknown parameter"},
+		{"bad dates", func(in *CreateGroupInput) { in.DateEnd = "2024-12-31" }, "on or after"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snaps := &fakeSnapshotRepo{}
+			in := validGroup()
+			tt.modify(&in)
+
+			_, err := newTestSnapshotService(snaps, bothMethodologies()).CreateGroup(in)
+			var invalid *ValidationError
+			if !errors.As(err, &invalid) || !strings.Contains(invalid.Message, tt.want) {
+				t.Fatalf("err = %v, want a ValidationError containing %q", err, tt.want)
+			}
+			if snaps.calls != 0 {
+				t.Error("repository was called for an invalid group")
+			}
+		})
+	}
+}
+
+func TestCreateGroupUnknownMethodology(t *testing.T) {
+	in := validGroup()
+	in.Members[1].Methodology = "water-history"
+	if _, err := newTestSnapshotService(&fakeSnapshotRepo{}, bothMethodologies()).CreateGroup(in); !errors.Is(err, ErrUnknownMethodology) {
+		t.Fatalf("err = %v, want ErrUnknownMethodology", err)
 	}
 }

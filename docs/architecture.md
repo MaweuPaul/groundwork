@@ -73,6 +73,7 @@ When a snapshot completes, it gets a `record_hash`: a SHA-256 fingerprint of its
 - `verify_parcel_chain(parcel_id)` recomputes one parcel's chain; `verify_snapshot_chain()` checks every parcel. Each reports every record that does not match. A per-parcel head (`parcel_chain_heads`) remembers each chain's length, so records removed from its end are caught too. There is no API endpoint for them yet.
 - Records sealed before per-parcel chains (migration 015) linked to whichever snapshot completed before them, of any parcel. They keep verifying in that closed global chain, and each parcel's chain continues from its latest such record.
 - Records keep the format they were sealed with (`record_format`), so old hashes still verify when the format changes. New records use format v5 (parameters, source versions, flags, the manifest hash, the worker's code version and artifacts); series use series format v2.
+- **Combined runs (groups):** several methodologies for the same window, e.g. NDVI and rainfall for one season. Each member is sealed as its own snapshot in the parcel's chain; when the last finishes, a trigger seals the group with one hash over its window and every member's record hash (a failed member is recorded as failed), so a member can't be dropped later. `verify_snapshot_group(id)` rechecks it.
 - **Series:** each window is sealed as its own snapshot. When the last window finishes, a trigger seals the series with one hash over its settings and every window's result in date order, so a window can't be dropped later. Series hashes are stored on the series, not in the snapshot chain.
 - **Artifacts** (format v5): files a methodology produces with its result, like the NDVI map image, are stored before completion and sealed one line each: key, media type, and SHA-256 of the content and of the metadata (e.g. where the image is drawn), both computed by the database. If the image can't be drawn the snapshot still completes, with a sealed `map_image_failed` flag. Images of earlier snapshots were drawn after sealing and are marked as not sealed.
 - A parcel chain can't show that a parcel's newest records, or the whole parcel, were deleted by someone with database access. Planned: a periodic checkpoint hashing every parcel's head, published externally (e.g. OpenTimestamps), which also proves the history existed at that time. No blockchain or Web3 is required.
@@ -88,7 +89,7 @@ There is no HTTP API between the services. The contract is which tables each one
 | `snapshots` | insert (pending), read | read; changed only through the queue functions |
 | `snapshot_jobs` | insert (with the snapshot, same transaction) | read; changed only through the queue functions |
 | `measurements`, `imagery_sources`, `snapshot_flags`, `artifacts` | read | read, insert |
-| `snapshot_series` | insert, read | no direct access; sealed by a trigger |
+| `snapshot_series`, `snapshot_groups` | insert, read | no direct access; sealed by a trigger |
 
 The worker has no direct `UPDATE` rights. It drives jobs through four functions, each of which checks that it still holds the job's lock:
 

@@ -15,6 +15,9 @@ import type {
   QueuedSnapshot,
   SeriesRef,
   SeriesSummary,
+  GroupRef,
+  GroupSummary,
+  NewGroup,
   Snapshot,
   SnapshotSummary,
   User,
@@ -90,6 +93,11 @@ export const createSeries = (parcelId: string, series: NewSeries) =>
   api<SeriesRef>(`/parcels/${id(parcelId)}/series`, { method: "POST", body: series });
 
 export const getParcelSeries = (parcelId: string) => api<SeriesSummary[]>(`/parcels/${id(parcelId)}/series`);
+
+export const createGroup = (parcelId: string, group: NewGroup) =>
+  api<GroupRef>(`/parcels/${id(parcelId)}/groups`, { method: "POST", body: group });
+
+export const getParcelGroups = (parcelId: string) => api<GroupSummary[]>(`/parcels/${id(parcelId)}/groups`);
 
 export const getParcelSnapshots = (parcelId: string) =>
   api<SnapshotSummary[]>(`/parcels/${id(parcelId)}/snapshots`);

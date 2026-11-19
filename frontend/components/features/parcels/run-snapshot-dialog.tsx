@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, CirclePlay, Lightbulb, Lock, PlusCircle, Satellite, SlidersHorizontal } from 'lucide-react';
+import { CirclePlay, Lightbulb, Lock, PlusCircle, Satellite, SlidersHorizontal } from 'lucide-react';
 import { useActionState, useState } from 'react';
 
 import { runSnapshotAction, type SnapshotFormState } from '@/app/(app)/parcels/[slug]/actions';
@@ -19,6 +19,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { methodologyView } from '@/lib/methodologies';
+import { PARAM_PREFIX } from '@/lib/snapshot-form';
 import type { Methodology, MethodologyParameter } from '@/lib/types';
 
 // Cloud Score+ cs_cdf a pixel needs to count as clear.
@@ -94,6 +95,8 @@ const EXTRAS: Record<string, Extra> = {
 };
 
 const EXTRA_ORDER = Object.keys(EXTRAS);
+
+const keyOf = (m: Methodology) => `${m.slug}@${m.version}`;
 const rank = (name: string) => (EXTRA_ORDER.includes(name) ? EXTRA_ORDER.indexOf(name) : EXTRA_ORDER.length);
 
 const defaultsFor = (m: Methodology | undefined, given?: Record<string, number>) =>
@@ -135,10 +138,12 @@ const choiceClass = (active: boolean) =>
 
 function ParameterField({
   p,
+  name,
   value,
   onChange,
 }: {
   p: MethodologyParameter;
+  name: string;
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -150,7 +155,7 @@ function ParameterField({
   if (extra?.choices) {
     return (
       <div className="flex flex-col gap-1.5">
-        <input type="hidden" name={`param.${p.name}`} value={value} />
+        <input type="hidden" name={name} value={value} />
         <span className={`${labelClass} flex items-center gap-1.5`}>
           {label}
           {help}
@@ -177,7 +182,7 @@ function ParameterField({
     );
   }
 
-  const id = `param-${p.name}`;
+  const id = name.replace(/[^a-z0-9_-]/gi, '-');
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className={labelClass}>
@@ -201,7 +206,7 @@ function ParameterField({
         <div className="flex items-center gap-1">
           <input
             id={id}
-            name={`param.${p.name}`}
+            name={name}
             type="number"
             min={p.min}
             max={p.max}
@@ -237,13 +242,15 @@ const RunSnapshotDialog = ({
   note?: string;
   trigger?: React.ReactNode;
 }) => {
-  const first = methodologies.find((m) => `${m.slug}@${m.version}` === initial?.methodology) ?? methodologies[0];
+  const first = methodologies.find((m) => keyOf(m) === initial?.methodology) ?? methodologies[0];
   const [open, setOpen] = useState(false);
   const [range] = useState(defaultRange);
   const [dateStart, setDateStart] = useState(initial?.dateStart ?? range.start);
   const [dateEnd, setDateEnd] = useState(initial?.dateEnd ?? range.end);
-  const [methodologyKey, setMethodologyKey] = useState(first ? `${first.slug}@${first.version}` : '');
-  const [values, setValues] = useState(() => defaultsFor(first, initial?.parameters));
+  const [selectedKeys, setSelectedKeys] = useState<string[]>(first ? [keyOf(first)] : []);
+  const [values, setValues] = useState<Record<string, Record<string, string>>>(() =>
+    first ? { [keyOf(first)]: defaultsFor(first, initial?.parameters) } : {},
+  );
   const [mode, setMode] = useState<'single' | 'series'>('single');
   const [windowMonths, setWindowMonths] = useState(1);
   const [intervalMonths, setIntervalMonths] = useState(3);
@@ -260,10 +267,23 @@ const RunSnapshotDialog = ({
     {},
   );
 
-  const selected = methodologies.find((m) => `${m.slug}@${m.version}` === methodologyKey);
-  // The API rejects start dates before the methodology's data begins.
-  const earliest = selected?.data_start.slice(0, 10);
-  const parameters = [...(selected?.parameters ?? [])].sort((a, b) => rank(a.name) - rank(b.name));
+  const selected = methodologies.filter((m) => selectedKeys.includes(keyOf(m)));
+  const combined = selected.length > 1;
+  // The API rejects start dates before any chosen methodology's data begins.
+  const earliest = selected.map((m) => m.data_start.slice(0, 10)).sort().at(-1);
+
+  // A series takes one methodology, so there choosing one replaces the other.
+  const toggle = (m: Methodology) => {
+    const key = keyOf(m);
+    setValues((prev) => (prev[key] ? prev : { ...prev, [key]: defaultsFor(m) }));
+    setSelectedKeys((prev) =>
+      mode === 'series' ? [key] : prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  };
+  const chooseMode = (next: 'single' | 'series') => {
+    setMode(next);
+    if (next === 'series') setSelectedKeys((prev) => prev.slice(0, 1));
+  };
   const today = isoDay(new Date());
   const windows = mode === 'series' ? seriesWindows(dateStart, dateEnd, windowMonths, intervalMonths) : [];
   const tooMany = windows.length > MAX_WINDOWS;
@@ -323,7 +343,7 @@ const RunSnapshotDialog = ({
                     type="button"
                     role="radio"
                     aria-checked={mode === m}
-                    onClick={() => setMode(m)}
+                    onClick={() => chooseMode(m)}
                     className={`rounded-sm px-3 py-2 text-label font-semibold transition-colors ${
                       mode === m ? 'bg-primary text-primary-foreground' : 'hover:bg-surface-lowest'
                     }`}
@@ -339,7 +359,9 @@ const RunSnapshotDialog = ({
                 <span className="flex items-center gap-1.5">
                   {mode === 'series' ? 'Series range' : 'Observation window'}
                   <InfoTip label={mode === 'series' ? 'the series range' : 'the observation window'}>
-                    {mode === 'series' ? HELP.series : (methodologyView(selected?.slug)?.windowHelp ?? HELP.window)}
+                    {mode === 'series'
+                      ? HELP.series
+                      : ((!combined && methodologyView(selected[0]?.slug)?.windowHelp) || HELP.window)}
                   </InfoTip>
                 </span>
                 <span className="font-mono text-micro font-normal text-muted-foreground">
@@ -419,58 +441,77 @@ const RunSnapshotDialog = ({
               </div>
             )}
 
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="methodology" className="text-label font-semibold">
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 flex w-full justify-between text-label font-semibold">
                 <span className="flex items-center gap-1.5">
-                  Processing methodology
+                  {mode === 'series' ? 'Processing methodology' : 'Processing methodologies'}
                   <InfoTip label="a methodology">{HELP.methodology}</InfoTip>
                 </span>
-              </label>
-              <div className="relative">
-                <select
-                  id="methodology"
-                  name="methodology"
-                  value={methodologyKey}
-                  onChange={(e) => {
-                    setMethodologyKey(e.target.value);
-                    setValues(defaultsFor(methodologies.find((m) => `${m.slug}@${m.version}` === e.target.value)));
-                  }}
-                  className={`${inputClass} appearance-none pr-9`}
-                >
-                  {methodologies.map((m) => (
-                    <option key={m.id} value={`${m.slug}@${m.version}`}>
-                      {m.name} (v{m.version})
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              </div>
-              {selected && (
+                <span className="font-mono text-micro font-normal text-muted-foreground">
+                  {mode === 'series' ? 'one per series' : 'choose one or more'}
+                </span>
+              </legend>
+              {methodologies.map((m) => {
+                const checked = selectedKeys.includes(keyOf(m));
+                return (
+                  <label
+                    key={m.id}
+                    className={`flex cursor-pointer gap-3 rounded-sm border p-3 transition-colors ${
+                      checked ? 'border-primary bg-surface-lowest' : 'border-border hover:border-outline'
+                    }`}
+                  >
+                    <input
+                      type={mode === 'series' ? 'radio' : 'checkbox'}
+                      name="methodology"
+                      value={keyOf(m)}
+                      checked={checked}
+                      onChange={() => toggle(m)}
+                      className="mt-1 size-4 shrink-0 accent-primary"
+                    />
+                    <span>
+                      <span className="block text-label font-semibold">
+                        {m.name} <span className="font-mono text-micro text-muted-foreground">v{m.version}</span>
+                      </span>
+                      <span className="block text-caption text-muted-foreground">
+                        {m.description} Data from {m.data_start.slice(0, 10)}.
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+              {combined && (
                 <p className="text-caption text-muted-foreground">
-                  {selected.description} Data from {selected.data_start.slice(0, 10)}.
+                  Each methodology runs as its own snapshot for the same window. When all have finished, they are
+                  sealed together with one hash, so none can be left out later.
                 </p>
               )}
-            </div>
+            </fieldset>
 
-            {parameters.length > 0 && (
-              <fieldset className="flex flex-col gap-4 rounded-md border border-border p-4">
-                <legend className="flex items-center gap-1.5 px-1 text-label font-semibold">
-                  <SlidersHorizontal className="size-4" />
-                  Settings
-                </legend>
-                {parameters.map((p) => (
-                  <ParameterField
-                    key={p.name}
-                    p={p}
-                    value={values[p.name] ?? ''}
-                    onChange={(v) => setValues((prev) => ({ ...prev, [p.name]: v }))}
-                  />
-                ))}
-                <p className="font-mono text-micro text-muted-foreground">
-                  These settings are saved with the snapshot and sealed into its record hash.
-                </p>
-              </fieldset>
-            )}
+            {selected.map((m) => {
+              const key = keyOf(m);
+              const params = [...m.parameters].sort((a, b) => rank(a.name) - rank(b.name));
+              if (params.length === 0) return null;
+              return (
+                <fieldset key={key} className="flex flex-col gap-4 rounded-md border border-border p-4">
+                  <legend className="flex items-center gap-1.5 px-1 text-label font-semibold">
+                    <SlidersHorizontal className="size-4" />
+                    {combined ? `Settings · ${m.name}` : 'Settings'}
+                  </legend>
+                  {params.map((p) => (
+                    <ParameterField
+                      key={p.name}
+                      p={p}
+                      name={`${PARAM_PREFIX}${key}:${p.name}`}
+                      value={values[key]?.[p.name] ?? ''}
+                      onChange={(v) => setValues((prev) => ({ ...prev, [key]: { ...prev[key], [p.name]: v } }))}
+                    />
+                  ))}
+                  <p className="font-mono text-micro text-muted-foreground">
+                    These settings are saved with the snapshot and sealed into its record hash.
+                  </p>
+                </fieldset>
+              );
+            })}
 
             <div className="flex gap-3 rounded-md bg-surface-container p-4">
               <Lock className="size-4 shrink-0 text-olive" />
@@ -488,9 +529,19 @@ const RunSnapshotDialog = ({
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" size="lg" disabled={pending || !selected || tooMany || (mode === 'series' && !windows.length)}>
+            <Button
+              type="submit"
+              size="lg"
+              disabled={pending || selected.length === 0 || tooMany || (mode === 'series' && !windows.length)}
+            >
               <CirclePlay />
-              {pending ? 'Queuing…' : mode === 'series' ? `Start ${windows.length} snapshots` : 'Start snapshot'}
+              {pending
+                ? 'Queuing…'
+                : mode === 'series'
+                  ? `Start ${windows.length} snapshots`
+                  : combined
+                    ? `Start ${selected.length} together`
+                    : 'Start snapshot'}
             </Button>
           </DialogFooter>
         </form>

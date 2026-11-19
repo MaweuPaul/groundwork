@@ -105,7 +105,7 @@ func (r *snapshotRepository) CreateSeriesWithJobs(in NewSeries) (SeriesRef, erro
 		for _, w := range in.Windows {
 			snap := t
 			snap.DateStart, snap.DateEnd = w[0], w[1]
-			if _, err := insertSnapshotWithJob(tx, snap, &ref.ID); err != nil {
+			if _, err := insertSnapshotWithJob(tx, snap, membership{SeriesID: &ref.ID}); err != nil {
 				return err
 			}
 		}
@@ -116,13 +116,8 @@ func (r *snapshotRepository) CreateSeriesWithJobs(in NewSeries) (SeriesRef, erro
 
 // ListSeriesByParcelForOwner returns ErrParcelNotFound for someone else's parcel.
 func (r *snapshotRepository) ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SeriesSummary, error) {
-	var owned bool
-	if err := r.db.Raw(`SELECT EXISTS (SELECT 1 FROM parcels WHERE id = ? AND owner_id = ?)`, parcelID, ownerID).
-		Scan(&owned).Error; err != nil {
+	if err := requireOwnedParcel(r.db, parcelID, ownerID); err != nil {
 		return nil, err
-	}
-	if !owned {
-		return nil, ErrParcelNotFound
 	}
 
 	series := []SeriesSummary{}

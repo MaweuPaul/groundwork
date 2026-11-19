@@ -92,6 +92,8 @@ type SnapshotRepository interface {
 	ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SnapshotSummary, error)
 	ArtifactForOwner(id, ownerID uuid.UUID, key string) (*Artifact, error)
 	CreateSeriesWithJobs(in NewSeries) (SeriesRef, error)
+	CreateGroupWithJobs(in NewGroup) (GroupRef, error)
+	ListGroupsByParcelForOwner(parcelID, ownerID uuid.UUID) ([]GroupSummary, error)
 	ListSeriesByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SeriesSummary, error)
 }
 
@@ -145,20 +147,26 @@ func (r *snapshotRepository) CreateWithJob(in NewSnapshot) (uuid.UUID, error) {
 			return err
 		}
 		var err error
-		id, err = insertSnapshotWithJob(tx, in, nil)
+		id, err = insertSnapshotWithJob(tx, in, membership{})
 		return err
 	})
 	return id, err
 }
 
-// insertSnapshotWithJob inserts one pending snapshot (optionally in a series) and its job.
-func insertSnapshotWithJob(tx *gorm.DB, in NewSnapshot, seriesID *uuid.UUID) (uuid.UUID, error) {
+// membership puts a snapshot in a series or a group; the zero value is a standalone snapshot.
+type membership struct {
+	SeriesID *uuid.UUID
+	GroupID  *uuid.UUID
+}
+
+// insertSnapshotWithJob inserts one pending snapshot and its job.
+func insertSnapshotWithJob(tx *gorm.DB, in NewSnapshot, of membership) (uuid.UUID, error) {
 	var row struct{ ID uuid.UUID }
 	res := tx.Raw(`
 		INSERT INTO snapshots (parcel_id, methodology_id, methodology_version,
 		                       date_start, date_end, parameters,
-		                       series_id, parcel_geometry, geometry_hash)
-		SELECT p.id, ?, ?, ?::date, ?::date, ?::jsonb, ?,
+		                       series_id, group_id, parcel_geometry, geometry_hash)
+		SELECT p.id, ?, ?, ?::date, ?::date, ?::jsonb, ?, ?,
 		       p.geometry,
 		       encode(sha256(ST_AsEWKB(ST_Normalize(ST_SnapToGrid(p.geometry, 0.0000001)), 'NDR')), 'hex')
 		FROM parcels p
@@ -166,7 +174,7 @@ func insertSnapshotWithJob(tx *gorm.DB, in NewSnapshot, seriesID *uuid.UUID) (uu
 		RETURNING id`,
 		in.MethodologyID, in.MethodologyVersion,
 		in.DateStart.Format(time.DateOnly), in.DateEnd.Format(time.DateOnly),
-		in.Parameters, seriesID,
+		in.Parameters, of.SeriesID, of.GroupID,
 		in.ParcelID, in.OwnerID,
 	).Scan(&row)
 	if res.Error != nil {
@@ -348,33 +356,29 @@ type SnapshotSummary struct {
 	Measurements        map[string]float64 `json:"measurements"`
 	NdviImage           *NdviImageInfo     `json:"ndvi_image,omitempty"`
 	SeriesShortID       *string            `json:"series_short_id,omitempty"`
+	GroupShortID        *string            `json:"group_short_id,omitempty"`
 }
 
 // ListByParcelForOwner returns the parcel's snapshots, newest first, or
 // ErrParcelNotFound when the parcel doesn't exist or isn't the owner's.
 func (r *snapshotRepository) ListByParcelForOwner(parcelID, ownerID uuid.UUID) ([]SnapshotSummary, error) {
-	var owned bool
-	err := r.db.Raw(`SELECT EXISTS (SELECT 1 FROM parcels WHERE id = ? AND owner_id = ?)`, parcelID, ownerID).
-		Scan(&owned).Error
-	if err != nil {
+	if err := requireOwnedParcel(r.db, parcelID, ownerID); err != nil {
 		return nil, err
-	}
-	if !owned {
-		return nil, ErrParcelNotFound
 	}
 
 	snapshots := []SnapshotSummary{}
-	err = r.db.Raw(`
+	err := r.db.Raw(`
 		SELECT s.id, s.short_id, s.status, s.failure_message, m.slug AS methodology, s.methodology_version,
 		       to_char(s.date_start, 'YYYY-MM-DD') AS date_start,
 		       to_char(s.date_end, 'YYYY-MM-DD') AS date_end,
 		       s.parameters, s.max_scene_cloud_pct::float8 AS max_scene_cloud_pct,
 		       s.cloud_score_threshold::float8 AS cloud_score_threshold,
 		       s.created_at, s.completed_at, s.chain_seq, parcel_record_number(s) AS parcel_seq, s.record_hash,
-		       r.short_id AS series_short_id
+		       r.short_id AS series_short_id, g.short_id AS group_short_id
 		FROM snapshots s
 		JOIN methodologies m ON m.id = s.methodology_id
 		LEFT JOIN snapshot_series r ON r.id = s.series_id
+		LEFT JOIN snapshot_groups g ON g.id = s.group_id
 		WHERE s.parcel_id = ?
 		ORDER BY s.created_at DESC`,
 		parcelID,

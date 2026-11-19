@@ -45,6 +45,8 @@ type SnapshotService interface {
 	ListMethodologies() ([]models.Methodology, error)
 	CreateSeries(in CreateSeriesInput) (repository.SeriesRef, error)
 	ListParcelSeries(parcelID, ownerID uuid.UUID) ([]repository.SeriesSummary, error)
+	CreateGroup(in CreateGroupInput) (repository.GroupRef, error)
+	ListParcelGroups(parcelID, ownerID uuid.UUID) ([]repository.GroupSummary, error)
 }
 
 type snapshotService struct {
