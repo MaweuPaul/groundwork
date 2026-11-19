@@ -7,6 +7,8 @@ type MethodologyView = {
   title: string;
   icon: LucideIcon;
   scale: string;
+  // Help for the date range in the snapshot dialog.
+  windowHelp: string;
   // Measurement order on the snapshot page; ones not listed follow.
   order: string[];
   summary: (m: Record<string, number>) => string | undefined;
@@ -18,6 +20,8 @@ const views: Record<string, MethodologyView> = {
     title: 'Vegetation measurements',
     icon: Sprout,
     scale: '10 m pixels · median composite',
+    windowHelp:
+      'The dates of imagery to use. Every clear Sentinel-2 view of the parcel in this range is combined into one median picture, so short gaps in coverage don’t matter.',
     order: ['ndvi_mean', 'ndvi_max', 'valid_pixel_pct'],
     summary: (m) =>
       m.ndvi_mean === undefined
@@ -35,6 +39,8 @@ const views: Record<string, MethodologyView> = {
     title: 'Rainfall measurements',
     icon: CloudRain,
     scale: '~5.5 km pixels · 1991–2020 normal',
+    windowHelp:
+      'The days to total, start and end included. Each day’s rainfall is summed and compared with the same dates in 1991–2020. CHIRPS is published a few weeks after each month ends, so very recent days aren’t available yet.',
     order: ['rain_total_mm', 'rain_normal_mm', 'rain_pct_of_normal', 'rainy_days', 'longest_dry_spell_days'],
     summary: (m) =>
       m.rain_total_mm === undefined
