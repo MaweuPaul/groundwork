@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Layers, LayoutGrid, LogOut, type LucideIcon } from 'lucide-react';
+import { Box, FlaskConical, Layers, LayoutGrid, LogOut, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -34,6 +34,7 @@ const navItems: NavItem[] = [
     roles: ['asset_holder', 'auditor'],
   },
   { title: 'Parcels', url: '/parcels', icon: Layers, roles: ['asset_holder'] },
+  { title: 'Methodologies', url: '/methodologies', icon: FlaskConical, roles: ['asset_holder', 'auditor'] },
   // Hidden until their pages and backend exist:
   // { title: 'Claims Registry', url: '/claims-registry', icon: ClipboardList, roles: ['auditor'] },
   // { title: 'Spectral Telemetry', url: '/spectral-telemetry', icon: Satellite, roles: ['asset_holder', 'auditor'] },

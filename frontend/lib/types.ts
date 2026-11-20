@@ -266,6 +266,19 @@ export type Methodology = {
   data_start: string; // first day the methodology's data covers
   created_at: string;
   parameters: MethodologyParameter[];
+  measurements: MethodologyMeasurement[];
+  // The published spec; every record made with this methodology seals its hash.
+  manifest_text: string;
+  manifest_sha256: string;
+  records: number; // completed snapshots the signed-in user has made with it
+};
+
+// One measurement a methodology produces, in display order.
+export type MethodologyMeasurement = {
+  slug: string;
+  name: string;
+  unit: string | null;
+  description: string;
 };
 
 // A setting a methodology accepts. The API rejects values outside min to max.

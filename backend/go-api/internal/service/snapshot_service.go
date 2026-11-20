@@ -42,7 +42,7 @@ type SnapshotService interface {
 	GetSnapshot(id, ownerID uuid.UUID) (*repository.SnapshotDetail, error)
 	GetArtifact(id, ownerID uuid.UUID, key string) (*repository.Artifact, error)
 	ListParcelSnapshots(parcelID, ownerID uuid.UUID) ([]repository.SnapshotSummary, error)
-	ListMethodologies() ([]models.Methodology, error)
+	ListMethodologies(ownerID uuid.UUID) ([]models.Methodology, error)
 	CreateSeries(in CreateSeriesInput) (repository.SeriesRef, error)
 	ListParcelSeries(parcelID, ownerID uuid.UUID) ([]repository.SeriesSummary, error)
 	CreateGroup(in CreateGroupInput) (repository.GroupRef, error)
@@ -81,8 +81,8 @@ func (s *snapshotService) ListParcelSnapshots(parcelID, ownerID uuid.UUID) ([]re
 	return s.snapshots.ListByParcelForOwner(parcelID, ownerID)
 }
 
-func (s *snapshotService) ListMethodologies() ([]models.Methodology, error) {
-	return s.methodologies.List()
+func (s *snapshotService) ListMethodologies(ownerID uuid.UUID) ([]models.Methodology, error) {
+	return s.methodologies.List(ownerID)
 }
 
 // CreateSnapshot validates the request and queues the snapshot. The job is picked

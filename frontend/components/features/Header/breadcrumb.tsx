@@ -17,6 +17,7 @@ import { labelFromSegment } from '@/lib/paths';
 const labels: Record<string, string> = {
   parcels: 'Parcels',
   snapshots: 'Snapshots',
+  methodologies: 'Methodologies',
   new: 'Register',
 };
 

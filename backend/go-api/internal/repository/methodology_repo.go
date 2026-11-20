@@ -10,7 +10,7 @@ import (
 
 type MethodologyRepository interface {
 	GetBySlugVersion(slug, version string) (*models.Methodology, error)
-	List() ([]models.Methodology, error)
+	List(ownerID uuid.UUID) ([]models.Methodology, error)
 	Parameters(methodologyID uuid.UUID) ([]models.MethodologyParameter, error)
 }
 
@@ -35,28 +35,71 @@ func (r *methodologyRepository) GetBySlugVersion(slug, version string) (*models.
 	return &m, nil
 }
 
-func (r *methodologyRepository) List() ([]models.Methodology, error) {
+// List returns every methodology with its parameters, measurements and manifest, and how
+// many completed snapshots ownerID has made with each.
+func (r *methodologyRepository) List(ownerID uuid.UUID) ([]models.Methodology, error) {
 	methodologies := []models.Methodology{}
-	if err := r.db.Order("slug, created_at").Find(&methodologies).Error; err != nil {
+	if err := r.db.Order("created_at, slug").Find(&methodologies).Error; err != nil {
 		return nil, err
 	}
 
-	var rows []struct {
+	var params []struct {
 		MethodologyID uuid.UUID
 		models.MethodologyParameter
 	}
 	if err := r.db.Raw(`SELECT methodology_id, ` + parameterColumns + ` FROM methodology_parameters ORDER BY name`).
-		Scan(&rows).Error; err != nil {
+		Scan(&params).Error; err != nil {
 		return nil, err
 	}
-	byMethodology := map[uuid.UUID][]models.MethodologyParameter{}
-	for _, row := range rows {
-		byMethodology[row.MethodologyID] = append(byMethodology[row.MethodologyID], row.MethodologyParameter)
+
+	var measurements []struct {
+		MethodologyID uuid.UUID
+		models.MethodologyMeasurement
 	}
+	if err := r.db.Raw(`
+		SELECT mm.methodology_id, mt.slug, mt.name, mt.unit, COALESCE(mt.description, '') AS description
+		FROM methodology_measurements mm
+		JOIN measurement_types mt ON mt.id = mm.measurement_type_id
+		ORDER BY mm.position`).Scan(&measurements).Error; err != nil {
+		return nil, err
+	}
+
+	var extras []struct {
+		ID             uuid.UUID
+		ManifestText   string
+		ManifestSHA256 string `gorm:"column:manifest_sha256"`
+		Records        int
+	}
+	if err := r.db.Raw(`
+		SELECT m.id,
+		       methodology_manifest_text(m.id) AS manifest_text,
+		       methodology_manifest_hash(m.id) AS manifest_sha256,
+		       (SELECT count(*)
+		        FROM snapshots s JOIN parcels p ON p.id = s.parcel_id
+		        WHERE s.methodology_id = m.id AND s.status = 'completed' AND p.owner_id = ?) AS records
+		FROM methodologies m`, ownerID).Scan(&extras).Error; err != nil {
+		return nil, err
+	}
+
+	index := make(map[uuid.UUID]*models.Methodology, len(methodologies))
 	for i := range methodologies {
-		methodologies[i].Parameters = byMethodology[methodologies[i].ID]
-		if methodologies[i].Parameters == nil {
-			methodologies[i].Parameters = []models.MethodologyParameter{}
+		m := &methodologies[i]
+		m.Parameters, m.Measurements = []models.MethodologyParameter{}, []models.MethodologyMeasurement{}
+		index[m.ID] = m
+	}
+	for _, p := range params {
+		if m := index[p.MethodologyID]; m != nil {
+			m.Parameters = append(m.Parameters, p.MethodologyParameter)
+		}
+	}
+	for _, mm := range measurements {
+		if m := index[mm.MethodologyID]; m != nil {
+			m.Measurements = append(m.Measurements, mm.MethodologyMeasurement)
+		}
+	}
+	for _, e := range extras {
+		if m := index[e.ID]; m != nil {
+			m.ManifestText, m.ManifestSHA256, m.Records = e.ManifestText, e.ManifestSHA256, e.Records
 		}
 	}
 	return methodologies, nil

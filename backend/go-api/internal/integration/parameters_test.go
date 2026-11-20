@@ -100,7 +100,7 @@ func TestDatabaseRejectsBadParameters(t *testing.T) {
 
 func TestMethodologiesListTheirParameterSpecs(t *testing.T) {
 	tx := begin(t)
-	methodologies, err := repository.NewMethodologyRepository(tx).List()
+	methodologies, err := repository.NewMethodologyRepository(tx).List(newUser(t, tx, "asset_holder"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestMethodologiesListTheirParameterSpecs(t *testing.T) {
 
 func TestMethodologiesStateWhereTheirDataStarts(t *testing.T) {
 	tx := begin(t)
-	methodologies, err := repository.NewMethodologyRepository(tx).List()
+	methodologies, err := repository.NewMethodologyRepository(tx).List(newUser(t, tx, "asset_holder"))
 	if err != nil {
 		t.Fatal(err)
 	}

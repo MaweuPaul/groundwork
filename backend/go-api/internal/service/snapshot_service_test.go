@@ -87,7 +87,7 @@ func (f *fakeMethodologyRepo) GetBySlugVersion(slug, version string) (*models.Me
 	return nil, nil
 }
 
-func (f *fakeMethodologyRepo) List() ([]models.Methodology, error) {
+func (f *fakeMethodologyRepo) List(ownerID uuid.UUID) ([]models.Methodology, error) {
 	return nil, nil
 }
 
