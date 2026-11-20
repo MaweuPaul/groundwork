@@ -85,7 +85,7 @@ There is no HTTP API between the services. The contract is which tables each one
 | | Go API | Python worker (`gee_worker` role) |
 |---|---|---|
 | `users`, `parcels`, `parcel_access` | read / write | no access |
-| `methodologies`, `methodology_parameters`, `measurement_types` | read / write | read |
+| `methodologies`, `methodology_parameters`, `methodology_measurements`, `measurement_types` | read / write | read |
 | `snapshots` | insert (pending), read | read; changed only through the queue functions |
 | `snapshot_jobs` | insert (with the snapshot, same transaction) | read; changed only through the queue functions |
 | `measurements`, `imagery_sources`, `snapshot_flags`, `artifacts` | read | read, insert |
@@ -106,7 +106,7 @@ The worker reads its inputs from the snapshot row itself: the frozen `parcel_geo
 
 Failures are recorded on the job and snapshot with a code. Terminal: `NO_IMAGERY`, `NO_CLEAR_PIXELS`, `COMPUTATION_TOO_LARGE` (over Earth Engine's limit for one request), `UNSUPPORTED_METHODOLOGY`, `GEE_ERROR` (snapshot → `failed`). Retryable: `GEE_QUOTA`, `GEE_TIMEOUT`, `UPSTREAM_ERROR` (job re-queued with backoff).
 
-Each methodology's code is a plugin in `app/plugins/<name>/`, found automatically by `app/registry.py` and keyed by slug. At startup the worker compares every plugin's manifest with `methodologies` and `methodology_parameters` and exits if they differ, so jobs wait in the queue instead of failing. A new methodology or parameter is added with a migration.
+Each methodology's code is a plugin in `app/plugins/<name>/`, found automatically by `app/registry.py` and keyed by slug. At startup the worker compares every plugin's manifest with `methodologies`, `methodology_parameters` and `methodology_measurements` and exits if they differ, so jobs wait in the queue instead of failing. A new methodology or parameter is added with a migration.
 
 ### Correctness rules
 
@@ -130,7 +130,7 @@ backend/gee-service/app/plugins/
 └── chirps_rain_season/
 ```
 
-The manifest describes the plugin; migrations publish the same values to `methodologies` and `methodology_parameters`, and the worker refuses to start if the two differ. The Go API validates requests against `methodology_parameters`, and the frontend will build its form and help text from it. Go and Python still only meet in Postgres. A plugin that uses an existing output type (value, time series, map, events) needs no Go or frontend change.
+The manifest describes the plugin; migrations publish the same values to `methodologies`, `methodology_parameters` and `methodology_measurements` (which measurements it produces, in display order), and the worker refuses to start if the two differ. The Go API validates requests against `methodology_parameters`, and the frontend builds its snapshot form and the Methodologies page from what `GET /methodologies` returns. Go and Python still only meet in Postgres. A plugin that uses an existing output type (value, time series, map, events) needs no Go or frontend change.
 
 Plugins live in this repo and are reviewed like other code. They are not installed at runtime, because sealed records are only trustworthy if the code behind them is known.
 

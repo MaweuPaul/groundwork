@@ -25,6 +25,31 @@ def published_parameters(conn: psycopg.Connection, slug: str, version: str) -> l
     return [Parameter(*row) for row in rows]
 
 
+def published_measurements(conn: psycopg.Connection, slug: str, version: str) -> list[str]:
+    """The measurement slugs stored for this methodology, in display order."""
+    rows = conn.execute(
+        """
+        SELECT mt.slug
+        FROM methodology_measurements mm
+        JOIN measurement_types mt ON mt.id = mm.measurement_type_id
+        JOIN methodologies m ON m.id = mm.methodology_id
+        WHERE m.slug = %s AND m.version = %s
+        ORDER BY mm.position
+        """,
+        (slug, version),
+    ).fetchall()
+    return [slug for (slug,) in rows]
+
+
+def measurement_differences(manifest: Manifest, published: list[str]) -> list[str]:
+    if manifest.measurements == published:
+        return []
+    return [
+        f"{manifest.slug}@{manifest.version}: measurements are {manifest.measurements} in the manifest "
+        f"but {published} in the database."
+    ]
+
+
 def differences(manifest: Manifest, published: list[Parameter] | None) -> list[str]:
     label = f"{manifest.slug}@{manifest.version}"
     if published is None:
@@ -42,5 +67,8 @@ def check(conn: psycopg.Connection, plugins: dict[str, Plugin]) -> list[str]:
     problems = []
     for plugin in plugins.values():
         m = plugin.manifest
-        problems += differences(m, published_parameters(conn, m.slug, m.version))
+        parameters = published_parameters(conn, m.slug, m.version)
+        problems += differences(m, parameters)
+        if parameters is not None:
+            problems += measurement_differences(m, published_measurements(conn, m.slug, m.version))
     return problems

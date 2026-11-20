@@ -23,8 +23,22 @@ type Methodology struct {
 	// First day the methodology's data covers; snapshots can't start earlier.
 	DataStart time.Time `gorm:"type:date;not null" json:"data_start"`
 	CreatedAt time.Time `gorm:"type:timestamptz;not null;default:now()" json:"created_at"`
-	// From methodology_parameters; filled by the repository's List.
-	Parameters []MethodologyParameter `gorm:"-" json:"parameters"`
+	// The rest are filled by the repository's List.
+	Parameters   []MethodologyParameter   `gorm:"-" json:"parameters"`
+	Measurements []MethodologyMeasurement `gorm:"-" json:"measurements"`
+	// The published spec every record made with this methodology seals by its hash.
+	ManifestText   string `gorm:"-" json:"manifest_text"`
+	ManifestSHA256 string `gorm:"-" json:"manifest_sha256"`
+	// Completed snapshots the caller has made with it.
+	Records int `gorm:"-" json:"records"`
+}
+
+// MethodologyMeasurement is one measurement a methodology produces, in display order.
+type MethodologyMeasurement struct {
+	Slug        string  `json:"slug"`
+	Name        string  `json:"name"`
+	Unit        *string `json:"unit"`
+	Description string  `json:"description"`
 }
 
 // MethodologyParameter is one setting a methodology accepts, with its range and default.

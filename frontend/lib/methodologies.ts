@@ -13,6 +13,7 @@ type MethodologyView = {
   order: string[];
   summary: (m: Record<string, number>) => string | undefined;
   inputs: [label: string, value: string][];
+  formula: string;
   sources: SourcesView;
 };
 
@@ -42,9 +43,10 @@ const views: Record<string, MethodologyView> = {
     inputs: [
       ['Sensor', 'Sentinel-2, Level-2A surface reflectance'],
       ['Bands', 'B4 (red), B8 (near-infrared)'],
-      ['Composite', 'median, NDVI = (B8 − B4) / (B8 + B4)'],
+      ['Composite', 'median of every clear view in the window'],
       ['Resolution', '10 m'],
     ],
+    formula: 'NDVI = (B8 − B4) / (B8 + B4)',
     sources: {
       title: 'Imagery sources',
       icon: Satellite,
@@ -70,6 +72,7 @@ const views: Record<string, MethodologyView> = {
       ['Normal', 'Same calendar window, 1991–2020'],
       ['Resolution', '~5.5 km (0.05°); values describe the area around the parcel'],
     ],
+    formula: '% of normal = window total ÷ mean of the same window in 1991–2020 × 100',
     sources: {
       title: 'Rainfall data',
       icon: CalendarDays,

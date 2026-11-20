@@ -23,6 +23,12 @@ export function snapshotPath(snapshot: { short_id: string }) {
   return `/snapshots/${snapshot.short_id}`;
 }
 
+export const methodologyKey = (m: { slug: string; version: string }) => `${m.slug}@${m.version}`;
+
+export function methodologyPath(m: { slug: string; version: string }) {
+  return `/methodologies?m=${encodeURIComponent(methodologyKey(m))}`;
+}
+
 // The ref to send to the API: the trailing short ID, or the whole segment for an
 // old UUID link (which then redirects to the clean URL). null when it's neither.
 export function refFromSegment(segment: string) {

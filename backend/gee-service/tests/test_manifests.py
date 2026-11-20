@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 from app.contract import Manifest, Parameter
-from app.manifests import differences
+from app.manifests import differences, measurement_differences
 from app.plugins.ndvi_s2_median.manifest import MANIFEST
 
 CLOUD, THRESHOLD, MIN_CLEAR = MANIFEST.parameters
@@ -31,3 +31,12 @@ def test_parameter_on_one_side_only_is_reported():
 def test_unpublished_methodology_is_reported():
     problems = differences(Manifest("rain", "1.0.0", [], []), None)
     assert problems == ["rain@1.0.0 is not in methodologies; add a migration for it."]
+
+
+def test_matching_measurements_have_no_differences():
+    assert measurement_differences(MANIFEST, ["ndvi_mean", "ndvi_max", "valid_pixel_pct"]) == []
+
+
+def test_missing_or_reordered_measurements_are_reported():
+    assert len(measurement_differences(MANIFEST, ["ndvi_mean", "ndvi_max"])) == 1
+    assert len(measurement_differences(MANIFEST, ["ndvi_max", "ndvi_mean", "valid_pixel_pct"])) == 1

@@ -302,7 +302,7 @@ func (h *SnapshotHandler) ListForParcel(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *SnapshotHandler) ListMethodologies(w http.ResponseWriter, r *http.Request) {
-	methodologies, err := h.service.ListMethodologies()
+	methodologies, err := h.service.ListMethodologies(middleware.UserFrom(r.Context()).ID)
 	if err != nil {
 		logging.From(r.Context()).Error("methodologies: list", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")

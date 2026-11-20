@@ -1,7 +1,9 @@
 import { FlaskConical } from 'lucide-react';
+import Link from 'next/link';
 
 import Border from '@/components/shared/border';
 import { methodologyView } from '@/lib/methodologies';
+import { methodologyPath } from '@/lib/paths';
 import type { Methodology, Snapshot } from '@/lib/types';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -14,6 +16,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 const MethodologyPanel = ({ snapshot, methodology }: { snapshot: Snapshot; methodology?: Methodology }) => {
+  const view = methodologyView(snapshot.methodology);
   return (
     <Border className="flex flex-col gap-3 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -28,13 +31,19 @@ const MethodologyPanel = ({ snapshot, methodology }: { snapshot: Snapshot; metho
 
       <div className="flex flex-col">
         <Row label="Pipeline">
-          {snapshot.methodology} v{snapshot.methodology_version}
+          <Link
+            href={methodologyPath({ slug: snapshot.methodology, version: snapshot.methodology_version })}
+            className="underline-offset-2 hover:underline"
+          >
+            {snapshot.methodology} v{snapshot.methodology_version}
+          </Link>
         </Row>
-        {methodologyView(snapshot.methodology)?.inputs.map(([label, value]) => (
+        {view?.inputs.map(([label, value]) => (
           <Row key={label} label={label}>
             {value}
           </Row>
         ))}
+        {view && <Row label="Formula">{view.formula}</Row>}
         <Row label="Window">
           {snapshot.date_start} → {snapshot.date_end} (UTC, inclusive)
         </Row>

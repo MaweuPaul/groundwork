@@ -7,7 +7,7 @@
 | **0. Foundations** | ✅ Ownership, MultiPolygon parcels, GeoJSON, auth, roles, methodology seed |
 | **1. One snapshot end to end** | ✅ Queue, hash chain, worker on Earth Engine, snapshot endpoints |
 | **2. Hardening** | ✅ Retries with backoff, stuck-job recovery, integration tests and CI on PostGIS, rate-limited logins and sign-ups, per-user snapshot limits, duplicate requests answered with the queued snapshot, one hash chain per parcel. Remaining: mock Earth Engine, chain checkpoints |
-| **3. Frontend** | ✅ Overview, parcels, register parcel, parcel detail, snapshot audit view, NDVI map, time series |
+| **3. Frontend** | ✅ Overview, parcels, register parcel, parcel detail, snapshot audit view, NDVI map, time series, methodologies |
 | **4. Analysis plugins** | ✅ Plugin folders, manifests, generic parameters, record formats v4 (manifest hash, worker code version) and v5 (sealed artifacts), a second plugin (CHIRPS rainfall), combined runs |
 | **5. Change analysis** | Per-pixel difference maps, area-based measurements, same-season comparisons |
 | **6. Independent verification** | In progress: ✅ chain check (`GET /parcels/{id}/verify` and the "Recheck chain" button). Next: an audit export with a standalone script that rechecks every hash without the Groundwork server, a GeoJSON boundary export, read-only sharing with an auditor, then claims and verdicts |
