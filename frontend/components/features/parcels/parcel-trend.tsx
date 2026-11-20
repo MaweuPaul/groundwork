@@ -65,7 +65,8 @@ const Chip = ({ color, label }: { color: string; label: string }) => (
 
 // Both series arrive oldest first and share one time axis, each point at the end of its window,
 // so a change in vegetation can be read against the rain that fell in the same window.
-const ParcelTrend = ({ ndvi, rain }: { ndvi: NdviPoint[]; rain: RainPoint[] }) => {
+// `marked` is the window end of the NDVI map on show, drawn as a solid line.
+const ParcelTrend = ({ ndvi, rain, marked }: { ndvi: NdviPoint[]; rain: RainPoint[]; marked?: string }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
@@ -134,6 +135,8 @@ const ParcelTrend = ({ ndvi, rain }: { ndvi: NdviPoint[]; rain: RainPoint[] }) =
     for (const t of times) if (Math.abs(x(t) - mx) < Math.abs(x(nearest) - mx)) nearest = t;
     setHover(nearest);
   };
+
+  const markedTime = marked === undefined ? undefined : times.find((t) => t === time(marked));
 
   const hoveredNdvi = hover === null ? undefined : ndvi.find((p) => time(p.dateEnd) === hover);
   const hoveredRain = hover === null ? undefined : rain.find((p) => time(p.dateEnd) === hover);
@@ -213,6 +216,9 @@ const ParcelTrend = ({ ndvi, rain }: { ndvi: NdviPoint[]; rain: RainPoint[] }) =
               </text>
             ))}
 
+            {markedTime !== undefined && (
+              <line x1={x(markedTime)} x2={x(markedTime)} y1={plotTop} y2={plotBottom} stroke={LINE} strokeOpacity={0.45} strokeWidth={2} />
+            )}
             {hover !== null && (
               <line
                 x1={x(hover)}
@@ -247,7 +253,7 @@ const ParcelTrend = ({ ndvi, rain }: { ndvi: NdviPoint[]; rain: RainPoint[] }) =
                 key={p.id}
                 cx={x(time(p.dateEnd))}
                 cy={yNdvi(p.ndvi)}
-                r={hover === time(p.dateEnd) ? 5.5 : 4}
+                r={hover === time(p.dateEnd) || markedTime === time(p.dateEnd) ? 5.5 : 4}
                 fill={LINE}
                 stroke={SURFACE}
                 strokeWidth={2}
