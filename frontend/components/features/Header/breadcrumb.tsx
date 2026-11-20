@@ -45,14 +45,14 @@ export function BreadcrumbHeader() {
   ];
 
   return (
-    <Breadcrumb>
-      <BreadcrumbList className="font-mono text-[13px] tracking-wider uppercase">
+    <Breadcrumb className="min-w-0">
+      <BreadcrumbList className="flex-nowrap font-mono text-[13px] tracking-wider uppercase">
         {crumbs.map((crumb, i) => (
           <Fragment key={crumb.href}>
-            {i > 0 && <BreadcrumbSeparator />}
-            <BreadcrumbItem>
+            {i > 0 && <BreadcrumbSeparator className="hidden md:block" />}
+            <BreadcrumbItem className={i === crumbs.length - 1 ? 'min-w-0' : 'hidden md:inline-flex'}>
               {i === crumbs.length - 1 ? (
-                <BreadcrumbPage className="font-bold">
+                <BreadcrumbPage className="truncate font-bold">
                   {crumb.label}
                 </BreadcrumbPage>
               ) : !crumb.linked ? (

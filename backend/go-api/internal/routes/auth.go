@@ -15,6 +15,8 @@ func registerAuth(mux *http.ServeMux, a *app.App) {
 	mux.Handle("POST /auth/login",
 		middleware.RateLimit(l.LoginIP, l.ClientIP,
 			middleware.RateLimit(l.LoginEmail, middleware.EmailKey, http.HandlerFunc(a.Users.Login))))
+	mux.HandleFunc("GET /auth/demo", a.Users.DemoStatus)
+	mux.Handle("POST /auth/demo", middleware.RateLimit(l.LoginIP, l.ClientIP, http.HandlerFunc(a.Users.Demo)))
 	mux.HandleFunc("POST /auth/refresh", a.Users.Refresh)
 	mux.HandleFunc("POST /auth/logout", a.Users.Logout)
 }

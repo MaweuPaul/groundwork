@@ -5,7 +5,7 @@ import Border from '@/components/shared/border';
 const Search = () => {
   // here write teh function to inculde the search prefererrable a hook
   return (
-    <Border className="flex h-9 w-80 items-center gap-2 px-3 focus-within:border-ring">
+    <Border className="hidden h-9 w-64 items-center lg:flex xl:w-80 gap-2 px-3 focus-within:border-ring">
       <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
       <input
         type="text"

@@ -39,6 +39,7 @@ Edit `.env`:
 | `BEHIND_PROXY` | no | `true` when a proxy appends the caller to `X-Forwarded-For` (Render). |
 | `SNAPSHOTS_PER_DAY` | no | Snapshots one user may queue in any 24 hours, each series window counted. Defaults to `30`; `0` turns it off. |
 | `MAX_SNAPSHOT_AREA_HA` | no | The largest parcel a snapshot may cover. Defaults to `50000` (500 km²); `0` turns it off. |
+| `DEMO_EMAIL` | no | Email of an existing account that **Try the demo** on the login page signs into, with no password. Make it an `asset_holder` with a long random password nobody keeps. Everyone who tries the demo shares it, including its daily snapshot allowance. Unset, the demo is off. |
 
 Every snapshot spends the Earth Engine project's compute quota, hence the two limits above. A request identical to one still pending or processing (same parcel, methodology, window and parameters) returns that snapshot instead of queuing another, so a double click costs nothing.
 

@@ -10,7 +10,7 @@ const Header = () => {
       <SidebarTrigger />
       <Separator orientation="vertical" className="data-vertical:h-5 data-vertical:self-center" />
       <BreadcrumbHeader />
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <Search />
         <HeaderActions />
       </div>

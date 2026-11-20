@@ -39,7 +39,7 @@ func New(cfg *config.Config, db *gorm.DB) *App {
 	userRepo := repository.NewUserRepository(db)
 	tokenRepo := repository.NewRefreshTokenRepository(db)
 	tokenSvc := service.NewTokenService(tokenRepo, []byte(cfg.JWTSecret), cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
-	authSvc := service.NewAuthService(userRepo, tokenSvc)
+	authSvc := service.NewAuthService(userRepo, tokenSvc, cfg.DemoEmail)
 
 	// URL ids: UUID or short ID
 	refSvc := service.NewRefService(repository.NewRefRepository(db))
