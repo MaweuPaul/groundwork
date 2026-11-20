@@ -74,6 +74,26 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, authResponse{User: user, TokenPair: pair})
 }
 
+func (h *AuthHandler) Demo(w http.ResponseWriter, r *http.Request) {
+	user, pair, err := h.service.Demo()
+	if err != nil {
+		writeAuthError(w, r, err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, authResponse{User: user, TokenPair: pair})
+}
+
+func (h *AuthHandler) DemoStatus(w http.ResponseWriter, r *http.Request) {
+	available, err := h.service.DemoAvailable()
+	if err != nil {
+		writeAuthError(w, r, err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"available": available})
+}
+
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
 	if err := httpx.DecodeJSON(w, r, &req); err != nil {
@@ -103,6 +123,8 @@ func writeAuthError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, service.ErrInvalidCredentials),
 		errors.Is(err, service.ErrInvalidRefreshToken):
 		httpx.WriteError(w, http.StatusUnauthorized, err.Error())
+	case errors.Is(err, service.ErrDemoUnavailable):
+		httpx.WriteError(w, http.StatusNotFound, err.Error())
 	default:
 		logging.From(r.Context()).Error("auth", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "something went wrong")

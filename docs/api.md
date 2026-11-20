@@ -7,6 +7,7 @@ The Go API's endpoints. Every route outside `/auth/*` needs `Authorization: Bear
 - `POST /auth/register`: creates a user (`email`, `password`, `first_name`, `last_name`, `username`, `role`) and returns the user plus a token pair.
 - `POST /auth/login`: returns the user plus a token pair. Unknown email and wrong password give the same error.
 - Logins and sign-ups are rate-limited (429 with `Retry-After`); the limits and `PROXY_SECRET` are in [development.md](development.md#backend-api).
+- `GET /auth/demo`: `{"available": true}` when the shared demo account is set up (`DEMO_EMAIL`). `POST /auth/demo` signs in as it without a password and returns the user plus a token pair, rate-limited like login; 404 when the demo is off. The login page shows **Try the demo** only when it's available.
 - `POST /auth/refresh`: swaps a refresh token for a new pair. Each refresh token works once; a token rotated in the last 10 seconds may be reused, so parallel requests and tabs don't sign the user out.
 - `POST /auth/logout`: `refresh_token`; ends that session at once (no reuse window). Always 204.
 - `GET /me`: the signed-in user.

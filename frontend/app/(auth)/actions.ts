@@ -126,6 +126,18 @@ export async function register(_prev: AuthFormState, formData: FormData): Promis
   redirect("/");
 }
 
+// Signs in as the shared demo account, for people who want to try Groundwork without an
+// account. The session ends with the browser.
+export async function demoLogin(): Promise<AuthFormState> {
+  const result = await postJSON("/auth/demo", {});
+  if (!result.ok) {
+    return { error: result.status === 404 ? "The demo isn't available right now." : result.error };
+  }
+
+  await storeTokens(result.data, false);
+  redirect("/");
+}
+
 export async function logout() {
   const cookieStore = await cookies();
   const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;

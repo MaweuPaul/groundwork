@@ -16,6 +16,7 @@ var (
 	ErrUsernameTaken      = errors.New("username already taken")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrInvalidRole        = errors.New("role must be auditor or asset_holder")
+	ErrDemoUnavailable    = errors.New("the demo is not available")
 )
 
 type AuthService interface {
@@ -23,15 +24,18 @@ type AuthService interface {
 	Refresh(rawRefreshToken string) (*TokenPair, error)
 	Logout(rawRefreshToken string) error
 	Login(email, password string) (*models.User, *TokenPair, error)
+	DemoAvailable() (bool, error)
+	Demo() (*models.User, *TokenPair, error)
 }
 
 type authService struct {
-	users  repository.UserRepository
-	tokens TokenService
+	users     repository.UserRepository
+	tokens    TokenService
+	demoEmail string
 }
 
-func NewAuthService(users repository.UserRepository, tokens TokenService) AuthService {
-	return &authService{users: users, tokens: tokens}
+func NewAuthService(users repository.UserRepository, tokens TokenService, demoEmail string) AuthService {
+	return &authService{users: users, tokens: tokens, demoEmail: normalizeEmail(demoEmail)}
 }
 
 // Register creates a new user and logs them in straight away.
@@ -70,6 +74,36 @@ func (s *authService) Login(email, password string) (*models.User, *TokenPair, e
 	}
 
 	return user, pair, nil
+}
+
+// Demo signs in as the shared demo account without a password, so visitors can try the
+// product without registering. Off unless DEMO_EMAIL names an existing account.
+func (s *authService) Demo() (*models.User, *TokenPair, error) {
+	user, err := s.demoUser()
+	if err != nil {
+		return nil, nil, err
+	}
+	if user == nil {
+		return nil, nil, ErrDemoUnavailable
+	}
+
+	pair, err := s.tokens.Issue(user.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return user, pair, nil
+}
+
+func (s *authService) DemoAvailable() (bool, error) {
+	user, err := s.demoUser()
+	return user != nil, err
+}
+
+func (s *authService) demoUser() (*models.User, error) {
+	if s.demoEmail == "" {
+		return nil, nil
+	}
+	return s.users.GetByEmail(s.demoEmail)
 }
 
 func (s *authService) Refresh(rawRefreshToken string) (*TokenPair, error) {

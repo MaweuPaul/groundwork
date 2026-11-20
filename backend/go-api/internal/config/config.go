@@ -25,6 +25,8 @@ type Config struct {
 	// Per user, to protect the Earth Engine quota; 0 turns a limit off.
 	SnapshotsPerDay   int
 	MaxSnapshotAreaHa float64
+	// The shared account behind "Try the demo"; empty turns the demo off.
+	DemoEmail string
 }
 
 func Load() *Config {
@@ -47,6 +49,7 @@ func Load() *Config {
 
 		SnapshotsPerDay:   int(getNumber("SNAPSHOTS_PER_DAY", 30)),
 		MaxSnapshotAreaHa: getNumber("MAX_SNAPSHOT_AREA_HA", 50_000),
+		DemoEmail:         getEnv("DEMO_EMAIL", ""),
 	}
 
 	if cfg.DatabaseURL == "" {
