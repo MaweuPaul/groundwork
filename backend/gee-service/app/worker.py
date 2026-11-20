@@ -11,7 +11,7 @@ import time
 
 import psycopg
 
-from app import earth_engine, manifests, queue, registry
+from app import coverage, earth_engine, manifests, queue, registry
 from app.config import ConfigError, Settings, load_settings
 from app.errors import JobError, classify
 from app.models import Job
@@ -62,12 +62,16 @@ def drain(conn: psycopg.Connection, settings: Settings) -> None:
 
 
 def serve(settings: Settings) -> None:
+    checked_coverage = None
     while True:
         try:
             with psycopg.connect(settings.database_url, autocommit=True) as conn:
                 conn.execute("LISTEN snapshot_jobs")
                 log.info("worker %s listening for jobs", settings.worker_id)
                 while True:
+                    if checked_coverage is None or time.monotonic() - checked_coverage >= coverage.REFRESH_SECONDS:
+                        coverage.refresh(conn, registry.PLUGINS)
+                        checked_coverage = time.monotonic()
                     drain(conn, settings)
                     # Returns on the first NOTIFY, or after the poll interval (for retries
                     # whose backoff has passed, and anything missed while busy).

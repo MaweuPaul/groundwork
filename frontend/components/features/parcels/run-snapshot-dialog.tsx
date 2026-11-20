@@ -271,6 +271,12 @@ const RunSnapshotDialog = ({
   const combined = selected.length > 1;
   // The API rejects start dates before any chosen methodology's data begins.
   const earliest = selected.map((m) => m.data_start.slice(0, 10)).sort().at(-1);
+  // ...and end dates after the latest day any of them has data for (CHIRPS lags a few weeks).
+  const lagging = selected
+    .filter((m) => m.data_end)
+    .sort((a, b) => a.data_end!.localeCompare(b.data_end!))
+    .at(0);
+  const latest = lagging?.data_end?.slice(0, 10);
 
   // A series takes one methodology, so there choosing one replaces the other.
   const toggle = (m: Methodology) => {
@@ -285,6 +291,8 @@ const RunSnapshotDialog = ({
     if (next === 'series') setSelectedKeys((prev) => prev.slice(0, 1));
   };
   const today = isoDay(new Date());
+  const lastEnd = latest && latest < today ? latest : today;
+  const pastData = !!latest && dateEnd > latest;
   const windows = mode === 'series' ? seriesWindows(dateStart, dateEnd, windowMonths, intervalMonths) : [];
   const tooMany = windows.length > MAX_WINDOWS;
 
@@ -392,10 +400,16 @@ const RunSnapshotDialog = ({
                     value={dateEnd}
                     onChange={setDateEnd}
                     min={dateStart}
-                    max={today}
+                    max={lastEnd}
                   />
                 </div>
               </div>
+              {pastData && lagging && (
+                <p role="alert" className="text-caption text-danger">
+                  {lagging.name} has data up to {latest} so far; it is published a few weeks after each month ends.
+                  Choose an end on or before {latest}.
+                </p>
+              )}
             </fieldset>
 
             {mode === 'series' && (
@@ -473,7 +487,8 @@ const RunSnapshotDialog = ({
                         {m.name} <span className="font-mono text-micro text-muted-foreground">v{m.version}</span>
                       </span>
                       <span className="block text-caption text-muted-foreground">
-                        {m.description} Data from {m.data_start.slice(0, 10)}.
+                        {m.description} Data from {m.data_start.slice(0, 10)}
+                        {m.data_end ? ` to ${m.data_end.slice(0, 10)}` : ''}.
                       </span>
                     </span>
                   </label>
@@ -532,7 +547,7 @@ const RunSnapshotDialog = ({
             <Button
               type="submit"
               size="lg"
-              disabled={pending || selected.length === 0 || tooMany || (mode === 'series' && !windows.length)}
+              disabled={pending || selected.length === 0 || tooMany || pastData || (mode === 'series' && !windows.length)}
             >
               <CirclePlay />
               {pending

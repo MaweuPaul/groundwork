@@ -70,7 +70,7 @@ PostgreSQL connects the two backends. The API writes a job, the worker picks it 
 
 **A new methodology.** Follow [Adding a methodology](architecture.md#adding-a-methodology). In short:
 1. A migration publishes the methodology, its measurement types, its parameters, and which measurements it produces (`methodology_measurements`, in the manifest's order).
-2. A plugin folder in `app/plugins/` holds `manifest.py`, `compute.py` and `__init__.py`.
+2. A plugin folder in `app/plugins/` holds `manifest.py`, `compute.py` and `__init__.py`. If its source lags behind today, the plugin also gives `latest_data` (see `chirps_rain_season`).
 3. An entry in `frontend/lib/methodologies.ts` gives its title, icon, inputs, formula and help text.
 
 The rest of the frontend picks it up from there.

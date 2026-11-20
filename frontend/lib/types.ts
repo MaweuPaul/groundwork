@@ -264,6 +264,7 @@ export type Methodology = {
   composite_method: string;
   date_lookback_days: number;
   data_start: string; // first day the methodology's data covers
+  data_end: string | null; // latest day it has data for so far; null when it keeps up with today
   created_at: string;
   parameters: MethodologyParameter[];
   measurements: MethodologyMeasurement[];

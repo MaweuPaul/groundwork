@@ -22,7 +22,10 @@ type Methodology struct {
 	DateLookbackDays int            `gorm:"type:integer;not null" json:"date_lookback_days"`
 	// First day the methodology's data covers; snapshots can't start earlier.
 	DataStart time.Time `gorm:"type:date;not null" json:"data_start"`
-	CreatedAt time.Time `gorm:"type:timestamptz;not null;default:now()" json:"created_at"`
+	// Latest day the source has data for, as last checked by the worker; nil when unknown.
+	// Snapshots can't end later. Filled by the repository.
+	DataEnd   *time.Time `gorm:"-" json:"data_end"`
+	CreatedAt time.Time  `gorm:"type:timestamptz;not null;default:now()" json:"created_at"`
 	// The rest are filled by the repository's List.
 	Parameters   []MethodologyParameter   `gorm:"-" json:"parameters"`
 	Measurements []MethodologyMeasurement `gorm:"-" json:"measurements"`

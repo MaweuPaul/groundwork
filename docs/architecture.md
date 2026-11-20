@@ -86,6 +86,7 @@ There is no HTTP API between the services. The contract is which tables each one
 |---|---|---|
 | `users`, `parcels`, `parcel_access` | read / write | no access |
 | `methodologies`, `methodology_parameters`, `methodology_measurements`, `measurement_types` | read / write | read |
+| `methodology_coverage` | read | read, insert, update (the latest day each source has data for) |
 | `snapshots` | insert (pending), read | read; changed only through the queue functions |
 | `snapshot_jobs` | insert (with the snapshot, same transaction) | read; changed only through the queue functions |
 | `measurements`, `imagery_sources`, `snapshot_flags`, `artifacts` | read | read, insert |
@@ -107,6 +108,8 @@ The worker reads its inputs from the snapshot row itself: the frozen `parcel_geo
 Failures are recorded on the job and snapshot with a code. Terminal: `NO_IMAGERY`, `NO_CLEAR_PIXELS`, `COMPUTATION_TOO_LARGE` (over Earth Engine's limit for one request), `UNSUPPORTED_METHODOLOGY`, `GEE_ERROR` (snapshot → `failed`). Retryable: `GEE_QUOTA`, `GEE_TIMEOUT`, `UPSTREAM_ERROR` (job re-queued with backoff).
 
 Each methodology's code is a plugin in `app/plugins/<name>/`, found automatically by `app/registry.py` and keyed by slug. At startup the worker compares every plugin's manifest with `methodologies`, `methodology_parameters` and `methodology_measurements` and exits if they differ, so jobs wait in the queue instead of failing. A new methodology or parameter is added with a migration.
+
+A plugin whose source is published well behind today (CHIRPS comes a few weeks after each month ends) also gives `latest_data`. At startup and every 6 hours the worker writes that day to `methodology_coverage`, and the API refuses a snapshot, series or combined run that ends after it, so the request fails at once with the date instead of as a queued job.
 
 ### Correctness rules
 
