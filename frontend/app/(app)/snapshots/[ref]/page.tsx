@@ -98,7 +98,7 @@ export default async function SnapshotPage({ params }: { params: Promise<{ ref: 
                 geometry={parcel.data.geometry}
                 ndviLayers={
                   s.ndvi_image
-                    ? [{ shortId: s.short_id, label: `${s.date_start} → ${s.date_end}`, image: s.ndvi_image }]
+                    ? [{ shortId: s.short_id, label: `${s.date_start} → ${s.date_end}`, dateEnd: s.date_end, image: s.ndvi_image }]
                     : []
                 }
               />
