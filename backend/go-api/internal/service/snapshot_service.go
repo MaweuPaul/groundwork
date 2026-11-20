@@ -99,7 +99,7 @@ func (s *snapshotService) CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, err
 		return uuid.Nil, err
 	}
 
-	m, params, err := s.methodologyFor(slug, version, start, in.Parameters)
+	m, params, err := s.methodologyFor(slug, version, start, end, in.Parameters)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -117,8 +117,8 @@ func (s *snapshotService) CreateSnapshot(in CreateSnapshotInput) (uuid.UUID, err
 }
 
 // methodologyFor loads the methodology and checks the request against it: its data must
-// cover the start date, and the parameters are resolved with their defaults.
-func (s *snapshotService) methodologyFor(slug, version string, start time.Time, given map[string]float64) (*models.Methodology, repository.Parameters, error) {
+// cover the whole window, and the parameters are resolved with their defaults.
+func (s *snapshotService) methodologyFor(slug, version string, start, end time.Time, given map[string]float64) (*models.Methodology, repository.Parameters, error) {
 	m, err := s.methodologies.GetBySlugVersion(slug, version)
 	if err != nil {
 		return nil, nil, err
@@ -129,6 +129,11 @@ func (s *snapshotService) methodologyFor(slug, version string, start time.Time, 
 	if start.Before(m.DataStart) {
 		return nil, nil, &ValidationError{
 			fmt.Sprintf("date_start cannot be before %s, the first day of data for %s", m.DataStart.Format(time.DateOnly), m.Name),
+		}
+	}
+	if m.DataEnd != nil && end.After(*m.DataEnd) {
+		return nil, nil, &ValidationError{
+			fmt.Sprintf("date_end cannot be after %s, the latest day %s has data for so far", m.DataEnd.Format(time.DateOnly), m.Name),
 		}
 	}
 	params, err := s.resolveParameters(m.ID, given)

@@ -316,6 +316,34 @@ func TestCreateSnapshotChecksTheMethodologysOwnDataStart(t *testing.T) {
 	}
 }
 
+func TestCreateSnapshotChecksTheMethodologysDataEnd(t *testing.T) {
+	published := *chirps
+	dataEnd := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)
+	published.DataEnd = &dataEnd
+	repo := &fakeMethodologyRepo{m: &published, params: []models.MethodologyParameter{}}
+	in := validInput()
+	in.Methodology, in.Parameters = "chirps-rain-season", nil
+
+	in.DateStart, in.DateEnd = "2026-08-01", "2026-09-30"
+	if _, err := newTestSnapshotService(&fakeSnapshotRepo{}, repo).CreateSnapshot(in); err != nil {
+		t.Fatalf("a window ending on the last day of data is allowed, got %v", err)
+	}
+
+	in.DateStart, in.DateEnd = "2026-09-01", "2026-10-31"
+	_, err := newTestSnapshotService(&fakeSnapshotRepo{}, repo).CreateSnapshot(in)
+	var invalid *ValidationError
+	if !errors.As(err, &invalid) || !strings.Contains(invalid.Message, "2026-09-30") {
+		t.Fatalf("err = %v, want a ValidationError naming 2026-09-30", err)
+	}
+
+	group := validGroup()
+	group.DateStart, group.DateEnd = "2026-09-01", "2026-10-31"
+	if _, err := newTestSnapshotService(&fakeSnapshotRepo{}, &fakeMethodologyRepo{m: ndvi,
+		others: map[*models.Methodology][]models.MethodologyParameter{&published: rainParams}}).CreateGroup(group); !errors.As(err, &invalid) {
+		t.Fatalf("a combined run past the rainfall data: err = %v, want a ValidationError", err)
+	}
+}
+
 var rainParams = []models.MethodologyParameter{
 	{Name: "rainy_day_mm", Label: "Rainy day threshold (mm)", Type: "number", Min: 0.1, Max: 20, Default: 1},
 }

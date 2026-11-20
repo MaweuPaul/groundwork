@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"groundwork/internal/models"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -31,6 +32,14 @@ func (r *methodologyRepository) GetBySlugVersion(slug, version string) (*models.
 	}
 	if err != nil {
 		return nil, err
+	}
+	var coverage []struct{ DataEnd time.Time }
+	if err := r.db.Raw(`SELECT data_end FROM methodology_coverage WHERE methodology_id = ?`, m.ID).
+		Scan(&coverage).Error; err != nil {
+		return nil, err
+	}
+	if len(coverage) == 1 {
+		m.DataEnd = &coverage[0].DataEnd
 	}
 	return &m, nil
 }
@@ -69,6 +78,7 @@ func (r *methodologyRepository) List(ownerID uuid.UUID) ([]models.Methodology, e
 		ManifestText   string
 		ManifestSHA256 string `gorm:"column:manifest_sha256"`
 		Records        int
+		DataEnd        *time.Time
 	}
 	if err := r.db.Raw(`
 		SELECT m.id,
@@ -76,8 +86,10 @@ func (r *methodologyRepository) List(ownerID uuid.UUID) ([]models.Methodology, e
 		       methodology_manifest_hash(m.id) AS manifest_sha256,
 		       (SELECT count(*)
 		        FROM snapshots s JOIN parcels p ON p.id = s.parcel_id
-		        WHERE s.methodology_id = m.id AND s.status = 'completed' AND p.owner_id = ?) AS records
-		FROM methodologies m`, ownerID).Scan(&extras).Error; err != nil {
+		        WHERE s.methodology_id = m.id AND s.status = 'completed' AND p.owner_id = ?) AS records,
+		       c.data_end
+		FROM methodologies m
+		LEFT JOIN methodology_coverage c ON c.methodology_id = m.id`, ownerID).Scan(&extras).Error; err != nil {
 		return nil, err
 	}
 
@@ -99,7 +111,7 @@ func (r *methodologyRepository) List(ownerID uuid.UUID) ([]models.Methodology, e
 	}
 	for _, e := range extras {
 		if m := index[e.ID]; m != nil {
-			m.ManifestText, m.ManifestSHA256, m.Records = e.ManifestText, e.ManifestSHA256, e.Records
+			m.ManifestText, m.ManifestSHA256, m.Records, m.DataEnd = e.ManifestText, e.ManifestSHA256, e.Records, e.DataEnd
 		}
 	}
 	return methodologies, nil

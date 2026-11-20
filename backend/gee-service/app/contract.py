@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from app.models import Job, Methodology
@@ -81,3 +81,7 @@ class Result:
 class Plugin:
     manifest: Manifest
     compute: Callable[[Job, Methodology], Result]
+    # The last day the source has data for, for a source published well behind today (CHIRPS
+    # comes a few weeks after each month ends). The worker records it and the API refuses
+    # windows that end later. None for sources that are close to real time.
+    latest_data: Callable[[], date] | None = None

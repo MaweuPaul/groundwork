@@ -66,3 +66,38 @@ func TestMethodologiesPublishMeasurementsManifestAndRecords(t *testing.T) {
 		t.Errorf("another user's ndvi records = %d, want 0", theirs["ndvi-s2-median"].Records)
 	}
 }
+
+func TestMethodologiesCarryTheLatestDayOfData(t *testing.T) {
+	tx := begin(t)
+	if err := tx.Exec(`
+		INSERT INTO methodology_coverage (methodology_id, data_end)
+		SELECT id, '2026-09-30' FROM methodologies WHERE slug = 'chirps-rain-season'`).Error; err != nil {
+		t.Fatal(err)
+	}
+	repo := repository.NewMethodologyRepository(tx)
+
+	chirps, err := repo.GetBySlugVersion("chirps-rain-season", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chirps.DataEnd == nil || chirps.DataEnd.Format("2006-01-02") != "2026-09-30" {
+		t.Fatalf("CHIRPS data_end = %v, want 2026-09-30", chirps.DataEnd)
+	}
+	ndvi, err := repo.GetBySlugVersion("ndvi-s2-median", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ndvi.DataEnd != nil {
+		t.Fatalf("NDVI has no coverage row, so data_end should be nil, got %v", ndvi.DataEnd)
+	}
+
+	methodologies, err := repo.List(newUser(t, tx, "auditor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range methodologies {
+		if (m.Slug == "chirps-rain-season") != (m.DataEnd != nil) {
+			t.Errorf("List: %s data_end = %v", m.Slug, m.DataEnd)
+		}
+	}
+}

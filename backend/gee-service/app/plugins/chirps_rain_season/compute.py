@@ -7,7 +7,7 @@ record. A CHIRPS pixel is about 5.5 km, so values describe the area around the p
 """
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from statistics import fmean
 from typing import Any
 
@@ -119,6 +119,20 @@ def run(job: Job, methodology: Methodology) -> Result:
     # One round trip for everything.
     info = ee.Dictionary({"days": days, "baseline_totals": baseline_totals}).getInfo()
     return summarize(info, job)
+
+
+def latest_day() -> date:
+    """The last day CHIRPS has published, looking back six months."""
+    today = datetime.now(timezone.utc).date()
+    latest = (
+        ee.ImageCollection(COLLECTION)
+        .filterDate((today - timedelta(days=183)).isoformat(), end_exclusive(today))
+        .aggregate_max("system:time_start")
+        .getInfo()
+    )
+    if latest is None:
+        raise RuntimeError(f"{COLLECTION} has no images from the last six months")
+    return utc_day(latest).date()
 
 
 def utc_day(time_start_ms: int) -> datetime:

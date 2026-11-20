@@ -51,7 +51,7 @@ func (s *snapshotService) CreateGroup(in CreateGroupInput) (repository.GroupRef,
 		}
 		seen[slug] = true
 
-		m, params, err := s.methodologyFor(slug, version, start, member.Parameters)
+		m, params, err := s.methodologyFor(slug, version, start, end, member.Parameters)
 		if err != nil {
 			return repository.GroupRef{}, err
 		}
