@@ -25,7 +25,7 @@ from app.plugins.chirps_rain_season.manifest import (
     NATIVE_SCALE_M,
     REDUCE_SCALE_M,
 )
-from app.windows import end_exclusive
+from app.windows import end_exclusive, shift_years
 
 PROVIDER = "CHIRPS (UCSB Climate Hazards Center) via Google Earth Engine"
 PROCESSING_LEVEL = "final"
@@ -51,13 +51,6 @@ def check_supported(m: Methodology) -> None:
             f"This worker can't compute {m.slug}@{m.version}.",
             retryable=False,
         )
-
-
-def shift_years(day: date, years: int) -> date:
-    try:
-        return day.replace(year=day.year + years)
-    except ValueError:  # 29 February in a year that has none
-        return day.replace(year=day.year + years, day=28)
 
 
 def baseline_windows(date_start: date, date_end: date) -> list[tuple[date, date]]:

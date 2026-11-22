@@ -126,6 +126,22 @@ def with_map_image(result: Result, geometry: ee.Geometry, geojson: str, composit
     return replace(result, artifacts=[*result.artifacts, image])
 
 
+def scene_from_row(row: list[Any]) -> Scene:
+    """A scene from one row of SCENE_PROPERTIES."""
+    scene_id, time_start, cloud, spacecraft, product_id, version = row
+    return Scene(
+        scene_id=scene_id,
+        satellite=(spacecraft or "Sentinel-2").lower(),
+        acquisition_time=datetime.fromtimestamp(time_start / 1000, tz=timezone.utc),
+        cloud_cover_pct=cloud,
+        product_id=product_id,
+        provider=PROVIDER,
+        processing_level=PROCESSING_LEVEL,
+        asset_uri=f"{S2_COLLECTION}/{scene_id}",
+        source_version=version_text(version),
+    )
+
+
 def summarize(info: dict[str, Any], job: Job) -> Result:
     """Turns Earth Engine's response into measurements. Never invents a value for missing data."""
     max_cloud = setting(job.parameters, "max_scene_cloud_pct")
@@ -169,20 +185,7 @@ def summarize(info: dict[str, Any], job: Job) -> Result:
         ),
     }
 
-    scenes = [
-        Scene(
-            scene_id=scene_id,
-            satellite=(spacecraft or "Sentinel-2").lower(),
-            acquisition_time=datetime.fromtimestamp(time_start / 1000, tz=timezone.utc),
-            cloud_cover_pct=cloud,
-            product_id=product_id,
-            provider=PROVIDER,
-            processing_level=PROCESSING_LEVEL,
-            asset_uri=f"{S2_COLLECTION}/{scene_id}",
-            source_version=version_text(version),
-        )
-        for scene_id, time_start, cloud, spacecraft, product_id, version in rows
-    ]
+    scenes = [scene_from_row(row) for row in rows]
 
     flags = {}
     if valid_pct < min_clear:
