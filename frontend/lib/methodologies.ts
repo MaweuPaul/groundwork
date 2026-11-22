@@ -1,4 +1,4 @@
-import { CalendarDays, CloudRain, type LucideIcon, Satellite, Sprout } from 'lucide-react';
+import { CalendarDays, CloudRain, type LucideIcon, Satellite, Sprout, Trees } from 'lucide-react';
 
 // How each methodology's results are shown. Names, units and descriptions of measurements come
 // from the API; this only adds what the database doesn't say: which result headlines a row,
@@ -81,6 +81,33 @@ const views: Record<string, MethodologyView> = {
       note: 'CHIRPS daily rainfall from the UCSB Climate Hazards Center, via Google Earth Engine. Each day’s grid was averaged over the parcel; the version is the one Earth Engine reported when it was read.',
     },
   },
+  'landcover-dynamic-world': {
+    title: 'Land cover',
+    icon: Trees,
+    scale: '10 m pixels · most common class',
+    windowHelp:
+      'The dates of imagery to use. Each pixel takes the class it had most often in this range, so a whole season shows what the land is used for, not one day’s clouds or harvest.',
+    order: ['crops_pct', 'trees_pct', 'grass_shrub_pct', 'built_pct', 'water_pct', 'bare_pct', 'landcover_valid_pct'],
+    summary: (m) =>
+      m.crops_pct === undefined
+        ? undefined
+        : `${m.crops_pct.toFixed(0)}% crops` +
+          (m.landcover_valid_pct === undefined ? '' : ` · ${m.landcover_valid_pct.toFixed(0)}% classified`),
+    inputs: [
+      ['Dataset', 'Dynamic World V1, Google and World Resources Institute'],
+      ['Source imagery', 'Sentinel-2 views with at most 35% cloud'],
+      ['Composite', 'most common class per pixel in the window'],
+      ['Resolution', '10 m'],
+    ],
+    formula: 'share = pixels of the class ÷ classified pixels × 100',
+    sources: {
+      title: 'Classified images',
+      icon: Satellite,
+      count: (n) => `${n} ${n === 1 ? 'image' : 'images'} in the composite`,
+      daily: false,
+      note: 'Dynamic World V1 land cover from Google and the World Resources Institute, via Google Earth Engine. Each image classifies one Sentinel-2 view; clouds are already removed.',
+    },
+  },
 };
 
 export const methodologyView = (slug: string | undefined) => (slug ? views[slug] : undefined);
@@ -132,6 +159,7 @@ const parameterText: Record<string, (v: number) => string> = {
   cloud_score_threshold: (v) => `clear ≥${v.toFixed(2)}`,
   min_clear_pct: (v) => `coverage ≥${v}%`,
   rainy_day_mm: (v) => `rainy day ≥${v} mm`,
+  min_valid_pct: (v) => `classified ≥${v}%`,
 };
 
 export const settingsSummary = (parameters: Record<string, number> | undefined) =>

@@ -12,6 +12,10 @@ def test_chirps_is_registered():
     assert plugin_for("chirps-rain-season").compute is not None
 
 
+def test_landcover_is_registered():
+    assert plugin_for("landcover-dynamic-world").compute is not None
+
+
 def test_unknown_methodology_fails_permanently():
     with pytest.raises(JobError) as err:
         plugin_for("water-history")
