@@ -42,5 +42,6 @@ Built so far: plugin folders with auto-discovery, manifests checked against the 
 2. ✅ Generic parameters, source versions, quality flags; record format v3. Code version and manifest hash sealed in record format v4.
 3. ✅ `artifacts`, sealed in record format v5. Remaining: `series_points`, methodology-aware frontend views.
 4. ✅ Second plugin, `chirps-rain-season`, end to end: seasonal rainfall from CHIRPS against the 1991–2020 normal. Each methodology now states where its data starts (`data_start`), and the frontend shows any methodology's measurements by their published names and units.
-5. Prototype water history and rainfall-adjusted residuals on parcels with known ground truth. Built so far: combined runs (NDVI and rainfall for the same window, sealed as a group) and both on one parcel chart.
-6. Analyses and batch exports, then reports.
+5. ✅ Third plugin, `landcover-dynamic-world`: the share of a parcel in crops, trees, grass and shrub, built-up, water and bare ground, from each pixel's most common Dynamic World class in the window. The first of the farm-lending datasets; soil, terrain and flooding follow.
+6. Prototype water history and rainfall-adjusted residuals on parcels with known ground truth. Built so far: combined runs (NDVI and rainfall for the same window, sealed as a group) and both on one parcel chart.
+7. Analyses and batch exports, then reports.
