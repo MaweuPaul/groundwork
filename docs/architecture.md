@@ -131,7 +131,8 @@ backend/gee-service/app/plugins/
 │   ├── render.py      map image (optional)
 │   └── test_plugin.py
 ├── chirps_rain_season/
-└── landcover_dynamic_world/
+├── landcover_dynamic_world/
+└── ndvi_anomaly_s2/       reuses ndvi_s2_median's composite
 ```
 
 The manifest describes the plugin; migrations publish the same values to `methodologies`, `methodology_parameters` and `methodology_measurements` (which measurements it produces, in display order), and the worker refuses to start if the two differ. The Go API validates requests against `methodology_parameters`, and the frontend builds its snapshot form and the Methodologies page from what `GET /methodologies` returns. Go and Python still only meet in Postgres. A plugin that uses an existing output type (value, time series, map, events) needs no Go or frontend change.
@@ -165,5 +166,5 @@ used: a change is a new version.
 <sub>Source: [architecture-3.mmd](diagrams/architecture-3.mmd)</sub>
 
 Candidate methodologies from the agricultural
-assessment idea (`chirps-rain-season` and `landcover-dynamic-world` are built): `s2-phenology`, `water-history`, `drainage-baseline`,
+assessment idea (`chirps-rain-season`, `landcover-dynamic-world` and `ndvi-anomaly-s2` are built): `s2-phenology`, `water-history`, `drainage-baseline`,
 `eudr-forest-check`.

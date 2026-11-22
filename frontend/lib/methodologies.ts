@@ -1,4 +1,4 @@
-import { CalendarDays, CloudRain, type LucideIcon, Satellite, Sprout, Trees } from 'lucide-react';
+import { CalendarDays, CloudRain, History, type LucideIcon, Satellite, Sprout, Trees } from 'lucide-react';
 
 // How each methodology's results are shown. Names, units and descriptions of measurements come
 // from the API; this only adds what the database doesn't say: which result headlines a row,
@@ -79,6 +79,33 @@ const views: Record<string, MethodologyView> = {
       count: (n) => `${n} daily ${n === 1 ? 'reading' : 'readings'}`,
       daily: true,
       note: 'CHIRPS daily rainfall from the UCSB Climate Hazards Center, via Google Earth Engine. Each day’s grid was averaged over the parcel; the version is the one Earth Engine reported when it was read.',
+    },
+  },
+  'ndvi-anomaly-s2': {
+    title: 'Vegetation against earlier years',
+    icon: History,
+    scale: '10 m pixels · up to 5 earlier years',
+    windowHelp:
+      'The dates to compare. The same dates in up to five earlier years (from 2019) form the baseline; a year counts only if enough of the parcel was clear. Longer windows give more years a chance to count.',
+    order: ['ndvi_anomaly', 'ndvi_mean', 'ndvi_baseline_mean', 'ndvi_baseline_years', 'valid_pixel_pct'],
+    summary: (m) =>
+      m.ndvi_anomaly === undefined
+        ? undefined
+        : `NDVI ${m.ndvi_anomaly >= 0 ? '+' : '−'}${Math.abs(m.ndvi_anomaly).toFixed(3)}` +
+          (m.ndvi_baseline_years === undefined ? ' vs earlier years' : ` vs ${m.ndvi_baseline_years}-year baseline`),
+    inputs: [
+      ['Sensor', 'Sentinel-2, Level-2A surface reflectance'],
+      ['Composite', 'median of every clear view, as in the NDVI methodology'],
+      ['Baseline', 'same calendar window, up to 5 earlier years from 2019, at least 3 counted'],
+      ['Resolution', '10 m'],
+    ],
+    formula: 'anomaly = window NDVI − mean NDVI of the counted earlier years',
+    sources: {
+      title: 'Imagery sources',
+      icon: Satellite,
+      count: (n) => `${n} ${n === 1 ? 'scene' : 'scenes'} across the window and baseline years`,
+      daily: false,
+      note: 'Copernicus Sentinel-2 Level-2A surface reflectance via Google Earth Engine, for the window and each baseline year. Clouds were masked per pixel with Cloud Score+.',
     },
   },
   'landcover-dynamic-world': {
